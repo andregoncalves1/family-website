@@ -1,0 +1,49 @@
+version: "3.9"
+
+services:
+  # Base de Dados
+  db:
+    image: postgres:14
+    container_name: postgres_db
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  # Backend Go
+  go_backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: go_backend
+    environment:
+      - DB_HOST=db
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      - db
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  # Frontend Vue
+  vue_frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: vue_frontend
+    depends_on:
+      - go_backend
+    ports:
+      - "80:80"
+    restart: unless-stopped
+
+volumes:
+  db_data:
