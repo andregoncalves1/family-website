@@ -19,7 +19,7 @@ Este projeto contém:
 ## Pré-requisitos
 
 - Docker e Docker Compose instalados na máquina de alojamento.
-- Conta ou host (Azure VM, por exemplo) com portas 80 e 8080 abertas (ou conforme a configuração do `docker-compose.yml`).
+- Conta ou host (Azure VM, por exemplo) com portas 80 e 18080 abertas (ou conforme a configuração do `docker-compose.yml`).
 
 ## Como Executar
 

@@ -15,5 +15,5 @@ FROM debian:stable-slim
 RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY --from=build /go/bin/backend /usr/local/bin/backend
 
-EXPOSE 8080
+EXPOSE 18080
 ENTRYPOINT ["backend"]
