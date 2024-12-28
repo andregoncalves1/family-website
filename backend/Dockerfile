@@ -7,7 +7,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . ./
-RUN go build -o /go/bin/backend main.go
+RUN go build -o /go/bin/backend .
 
 # Etapa final: imagem mínima
 FROM debian:stable-slim
