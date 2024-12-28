@@ -1,6 +1,6 @@
 # backend/Dockerfile
 # Etapa de build do binário Go
-FROM golang:1.20 as build
+FROM golang:1.22 as build
 
 WORKDIR /app
 COPY go.mod go.sum ./
