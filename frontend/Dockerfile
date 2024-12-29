@@ -4,7 +4,7 @@ FROM node:18-alpine as build
 
 WORKDIR /app
 COPY package.json ./
-RUN npm install vue3-apexcharts --save && npm install
+RUN npm install vue3-apexcharts --save && npm install vuetify@next && npm install
 
 COPY . ./
 RUN npm run build
