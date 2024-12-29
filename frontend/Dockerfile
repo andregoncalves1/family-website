@@ -7,7 +7,7 @@ COPY package.json ./
 RUN npm install vue3-apexcharts --save && npm install vuetify@next && npm install
 
 COPY . ./
-RUN npm run build
+RUN npm install vuetify@next && npm run build
 
 # Etapa 2: Servir com Nginx
 FROM nginx:stable-alpine
