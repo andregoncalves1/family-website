@@ -4,5 +4,14 @@ module.exports = {
     devServer: {
       port: 8081,
     },
+    css: {
+        loaderOptions: {
+          sass: {
+            additionalData: `
+              @use "vuetify/styles" as *;
+            `,
+          },
+        },
+    },
   }
   
