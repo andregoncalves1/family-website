@@ -29,6 +29,9 @@ type FeverMedicationRecordWithDisease struct {
 
 // loginHandler trata o login do utilizador
 func loginHandler(c *gin.Context) {
+
+	log.Println("Login Handler.")
+
 	var req struct {
 		Username string `json:"username" binding:"required"`
 		Password string `json:"password" binding:"required"`
@@ -74,6 +77,8 @@ func loginHandler(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao gerar token"})
 		return
 	}
+
+	log.Println("Fim de login Handler.")
 
 	c.JSON(http.StatusOK, gin.H{"token": tokenStr})
 }
