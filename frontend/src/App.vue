@@ -1,6 +1,10 @@
-<!-- frontend/src/App.vue -->
+<!-- src/App.vue -->
 <template>
-    <router-view />
+    <v-app>
+      <v-main>
+        <router-view />
+      </v-main>
+    </v-app>
   </template>
   
   <script>
@@ -10,6 +14,10 @@
   </script>
   
   <style>
-  /* Estilos globais se necessário */
+  /* Ensure the app takes full height and has no unintended margins */
+  html, body, #app {
+    height: 100%;
+    margin: 0;
+  }
   </style>
   

@@ -1,52 +1,14 @@
+// main.go
 package main
 
 import (
-	"database/sql"
 	"log"
 
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	_ "github.com/lib/pq" // Driver para PostgreSQL
 )
 
 func main() {
-	// Configuração da Base de Dados
-	dbHost := getEnv("DB_HOST", "127.0.0.1")
-	dbPort := getEnv("DB_PORT", "5432")
-	dbUser := getEnv("DB_USER", "admin")
-	dbPassword := getEnv("DB_PASSWORD", "rnnsd.AcreRU33I,au")
-	dbName := getEnv("DB_NAME", "famhealth")
-
-	// String de conexão
-	connStr := "host=" + dbHost + " port=" + dbPort + " user=" + dbUser + " password=" + dbPassword + " dbname=" + dbName + " sslmode=disable"
-	dbConn, err := sql.Open("postgres", connStr)
-	if err != nil {
-		log.Fatalf("Erro ao conectar à base de dados: %v", err)
-	}
-
-	// Testar a conexão
-	if err := dbConn.Ping(); err != nil {
-		log.Fatalf("Erro ao verificar conexão à base de dados: %v", err)
-	}
-
-	// Inicializar variáveis globais
-	jwtSecret := []byte(getEnv("JWT_SECRET", "default_secret"))
-	initializeGlobals(jwtSecret, dbConn)
-
-	// Criar tabelas (se necessário)
-	createTables()
-
-	// Configurar router
 	router := gin.Default()
-
-	// Configuração do CORS
-	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:8081"}, // URL do frontend
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Authorization", "Content-Type"},
-		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
-	}))
 
 	// Rotas Públicas
 	router.POST("/api/login", loginHandler)
@@ -90,8 +52,7 @@ func main() {
 	}
 
 	// Iniciar o servidor
-	port := getEnv("PORT", "18080")
-	if err := router.Run(":" + port); err != nil {
+	if err := router.Run(":18080"); err != nil {
 		log.Fatalf("Erro ao iniciar o servidor: %v", err)
 	}
 }

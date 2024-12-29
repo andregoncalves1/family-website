@@ -7,9 +7,11 @@ import HealthDiseases from './views/HealthDiseases.vue'
 import HealthReports from './views/HealthReports.vue'
 import Management from './views/Management.vue'
 import SelectProfile from './views/SelectProfile.vue'
+import TestVuetify from './views/TestVuetify.vue'
 
 const routes = [
   { path: '/', redirect: '/login' },
+  { path: '/test-vuetify', name: 'TestVuetify', component: TestVuetify },
   { path: '/login', name: 'Login', component: Login },
   {
     path: '/dashboard',
@@ -31,13 +33,13 @@ const router = createRouter({
 })
 
 // Proteção de rotas
-router.beforeEach((to, from, next) => {
+/*router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('token')
   if (to.path !== '/login' && !token) {
     next('/login')
   } else {
     next()
   }
-})
+})*/
 
 export default router
