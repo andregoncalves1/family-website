@@ -8,6 +8,7 @@ require (
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-playground/validator/v10 v10.23.0
 	github.com/golang-jwt/jwt/v4 v4.5.1
+	github.com/lib/pq v1.10.9
 	github.com/phpdave11/gofpdf v1.4.2
 	golang.org/x/crypto v0.31.0
 	gonum.org/v1/plot v0.15.0

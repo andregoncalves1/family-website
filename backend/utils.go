@@ -1,4 +1,3 @@
-// utils.go
 package main
 
 import (
@@ -15,35 +14,29 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// Variáveis Globais
 var (
 	jwtSecret []byte
 	validate  *validator.Validate
 	db        *sql.DB
 )
 
-// initializeGlobals inicializa as variáveis globais
 func initializeGlobals(secret []byte, dbConn *sql.DB) {
 	jwtSecret = secret
 	db = dbConn
 	validate = validator.New()
-	// Registrar validação personalizada para hexcolor
 	validate.RegisterValidation("hexcolor", validateHexColor)
 }
 
-// hashPassword gera um hash de uma senha
 func hashPassword(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)
 	return string(bytes), err
 }
 
-// checkPasswordHash verifica se a senha corresponde ao hash
 func checkPasswordHash(password, hash string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 	return err == nil
 }
 
-// getEnv obtém uma variável de ambiente ou retorna o valor padrão
 func getEnv(key, defaultVal string) string {
 	if value, exists := os.LookupEnv(key); exists {
 		return value
@@ -51,23 +44,22 @@ func getEnv(key, defaultVal string) string {
 	return defaultVal
 }
 
-// validateHexColor é uma função de validação personalizada para cores hexadecimais
 func validateHexColor(fl validator.FieldLevel) bool {
 	s := fl.Field().String()
+	if len(s) > 0 && s[0] == '#' {
+		s = s[1:] // Remove o prefixo '#'
+	}
 	if len(s) != 6 {
 		return false
 	}
 	for _, c := range s {
-		if !((c >= '0' && c <= '9') ||
-			(c >= 'a' && c <= 'f') ||
-			(c >= 'A' && c <= 'F')) {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
 			return false
 		}
 	}
 	return true
 }
 
-// jwtAuthMiddleware é um middleware para autenticação JWT
 func jwtAuthMiddleware(c *gin.Context) {
 	authHeader := c.GetHeader("Authorization")
 	if authHeader == "" {
@@ -85,7 +77,6 @@ func jwtAuthMiddleware(c *gin.Context) {
 
 	tokenStr := parts[1]
 	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
-		// Verificar o método de assinatura
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("Método de assinatura inesperado: %v", token.Header["alg"])
 		}
@@ -98,12 +89,20 @@ func jwtAuthMiddleware(c *gin.Context) {
 		return
 	}
 
-	// Opcional: Adicionar informações adicionais no contexto
 	claims, ok := token.Claims.(jwt.MapClaims)
-	if ok && token.Valid {
-		c.Set("userID", int(claims["sub"].(float64)))
+	if !ok || !token.Valid {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Token inválido"})
+		c.Abort()
+		return
 	}
 
+	userID, ok := claims["sub"].(float64)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Token inválido: campo 'sub' ausente ou inválido"})
+		c.Abort()
+		return
+	}
+	c.Set("userID", int(userID))
 	c.Next()
 }
 
