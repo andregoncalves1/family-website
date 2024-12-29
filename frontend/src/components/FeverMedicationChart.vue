@@ -15,7 +15,7 @@
   
   <script>
   import { defineComponent, ref, onMounted, watch } from 'vue'
-  import ApexCharts from 'vue3-apexcharts'
+  import VueApexCharts from 'vue3-apexcharts'
   import api from '../api'
   
   export default defineComponent({
