@@ -1,4 +1,3 @@
-<!-- frontend/src/views/Login.vue -->
 <template>
     <v-container class="fill-height" fluid>
       <v-row align="center" justify="center">
@@ -12,12 +11,16 @@
                 <v-text-field
                   v-model="username"
                   label="Username"
+                  clearable
+                  outlined
                   required
                 ></v-text-field>
                 <v-text-field
                   v-model="password"
                   label="Password"
                   type="password"
+                  clearable
+                  outlined
                   required
                 ></v-text-field>
                 <v-btn color="primary" type="submit" class="mt-4" block>
@@ -43,22 +46,23 @@
       return {
         username: '',
         password: '',
-        error: ''
+        error: '',
       }
     },
     methods: {
       doLogin() {
         this.error = ''
-        api.login(this.username, this.password)
-          .then(res => {
+        api
+          .login(this.username, this.password)
+          .then((res) => {
             localStorage.setItem('token', res.data.token)
             this.$router.push('/dashboard/select-profile')
           })
-          .catch(err => {
+          .catch((err) => {
             this.error = err.response?.data?.error || 'Erro de login'
           })
-      }
-    }
+      },
+    },
   }
   </script>
   
