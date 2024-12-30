@@ -33,13 +33,27 @@ function HealthDiseases() {
   });
   const [saving, setSaving] = useState(false);
 
+  // Função para sanitizar e garantir que cada doença tenha 'start_date' e 'end_date'
+  const sanitizeDiseases = (fetchedDiseases) => {
+    if (!Array.isArray(fetchedDiseases)) return [];
+
+    return fetchedDiseases.map((disease) => ({
+      ...disease,
+      start_date: disease.start_date ? disease.start_date : '',
+      end_date: disease.end_date ? disease.end_date : '',
+    }));
+  };
+
   const fetchDiseases = async () => {
     setLoading(true);
     try {
       const response = await api.getDiseases();
-      setDiseases(response.data);
+      const sanitizedDiseases = sanitizeDiseases(response.data);
+      console.log('Doenças Sanitizadas:', sanitizedDiseases); // Log para depuração
+      setDiseases(sanitizedDiseases);
     } catch (error) {
       toast.error('Erro ao carregar doenças.');
+      console.error('Erro ao carregar doenças:', error.response?.data || error);
     } finally {
       setLoading(false);
     }
@@ -61,10 +75,8 @@ function HealthDiseases() {
     setCurrentDisease({
       id: disease.id,
       name: disease.name,
-      start_date: disease.start_date.slice(0, 16), // For datetime-local input
-      end_date: disease.end_date
-        ? disease.end_date.slice(0, 16)
-        : '',
+      start_date: disease.start_date ? disease.start_date.slice(0, 16) : '',
+      end_date: disease.end_date ? disease.end_date.slice(0, 16) : '',
     });
     setOpen(true);
   };
@@ -78,24 +90,31 @@ function HealthDiseases() {
     try {
       const payload = {
         name: currentDisease.name,
-        start_date: currentDisease.start_date,
-        end_date: currentDisease.end_date || null,
+        start_date: currentDisease.start_date
+          ? new Date(currentDisease.start_date).toISOString()
+          : null,
+        end_date: currentDisease.end_date
+          ? new Date(currentDisease.end_date).toISOString()
+          : null,
       };
 
+      let response;
       if (editing) {
-        await api.updateDisease(currentDisease.id, payload);
+        response = await api.updateDisease(currentDisease.id, payload);
         toast.success('Doença atualizada com sucesso!');
       } else {
-        await api.addDisease(payload);
+        response = await api.addDisease(payload);
         toast.success('Doença adicionada com sucesso!');
       }
 
+      console.log('Resposta da API:', response.data); // Log para depuração
       fetchDiseases();
       handleClose();
     } catch (error) {
       const errorMsg =
         error.response?.data?.error || 'Erro ao salvar doença.';
       toast.error(errorMsg);
+      console.error('Erro ao salvar doença:', error.response?.data || error);
     } finally {
       setSaving(false);
     }
@@ -113,6 +132,7 @@ function HealthDiseases() {
       const errorMsg =
         error.response?.data?.error || 'Erro ao deletar doença.';
       toast.error(errorMsg);
+      console.error('Erro ao deletar doença:', error.response?.data || error);
     }
   };
 
@@ -125,20 +145,30 @@ function HealthDiseases() {
     { field: 'id', headerName: 'ID', width: 70 },
     { field: 'name', headerName: 'Nome', flex: 1 },
     {
-      field: 'start_date',
-      headerName: 'Data Início',
-      flex: 1,
-      valueGetter: (params) =>
-        new Date(params.row.start_date).toLocaleString(),
+        field: 'start_date',
+        headerName: 'Data Início',
+        flex: 1,
+        renderCell: (params) => {
+          const date = params.row.start_date ? new Date(params.row.start_date) : null;
+          return (
+            <span>
+              {date && !isNaN(date) ? date.toLocaleString() : 'N/A'}
+            </span>
+          );
+        },
     },
     {
-      field: 'end_date',
-      headerName: 'Data Fim',
-      flex: 1,
-      valueGetter: (params) =>
-        params.row.end_date
-          ? new Date(params.row.end_date).toLocaleString()
-          : 'Em curso...',
+        field: 'end_date',
+        headerName: 'Data Fim',
+        flex: 1,
+        renderCell: (params) => {
+          const date = params.row.end_date ? new Date(params.row.end_date) : null;
+          return (
+            <span>
+              {date && !isNaN(date) ? date.toLocaleString() : 'Em curso...'}
+            </span>
+          );
+        },
     },
     {
       field: 'actions',
@@ -187,6 +217,7 @@ function HealthDiseases() {
             loading={loading}
             autoHeight
             disableSelectionOnClick
+            getRowId={(row) => row.id}
           />
         </Grid>
       </Grid>

@@ -59,25 +59,29 @@ const getThirtyDaysAgoDate = () => {
   return `${year}-${month}-${day}`;
 };
 
-const formatDateTimeLocal = (dateTimeStr) => {
+// Função para formatar uma data para "YYYY-MM-DD"
+const formatDate = (date) => {
+  const d = new Date(date);
+  const pad = (num) => String(num).padStart(2, '0');
+  const year = d.getFullYear();
+  const month = pad(d.getMonth() + 1);
+  const day = pad(d.getDate());
+  return `${year}-${month}-${day}`;
+};
+
+// Função para formatar date_time no formato "YYYY-MM-DDTHH:MM"
+const formatDateTime = (dateTimeStr) => {
   if (!dateTimeStr) {
     return getCurrentDateTimeLocal(); // Fallback para data/hora atual
   }
-  const date = new Date(dateTimeStr);
-  const pad = (num) => String(num).padStart(2, '0');
-  const year = date.getFullYear();
-  const month = pad(date.getMonth() + 1);
-  const day = pad(date.getDate());
-  const hours = pad(date.getHours());
-  const minutes = pad(date.getMinutes());
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
+  return dateTimeStr.slice(0, 16); // "YYYY-MM-DDTHH:MM"
 };
 
 function HealthFever() {
   // Estado para os filtros
   const [filters, setFilters] = useState({
     startDate: getYesterdayDate(),
-    endDate: getCurrentDateTimeLocal().slice(0, 10), // Apenas a data
+    endDate: getCurrentDateTimeLocal().slice(0, 10), // Apenas a data "YYYY-MM-DD"
     diseaseID: '',
   });
 
@@ -119,16 +123,26 @@ function HealthFever() {
     if (!Array.isArray(fetchedRecords)) return [];
 
     return fetchedRecords
-      .filter(record => record !== undefined && record !== null && typeof record === 'object') // Remove registros indefinidos, nulos ou não objetos
-      .map(record => ({
+      .filter(
+        (record) =>
+          record !== undefined &&
+          record !== null &&
+          typeof record === 'object'
+      ) // Remove registros indefinidos, nulos ou não objetos
+      .map((record) => ({
         ...record,
-        id: record.id !== undefined && record.id !== null ? record.id : generateTempId(),
+        id:
+          record.id !== undefined && record.id !== null
+            ? record.id
+            : generateTempId(),
         // Preencher campos opcionais com valores padrão
         date_time: record.date_time ? record.date_time : '',
         medication: record.medication ? record.medication : '',
         disease_name: record.disease_name ? record.disease_name : '',
-        temperature: record.temperature !== undefined ? record.temperature : null,
-        profile_id: record.profile_id !== undefined ? record.profile_id : null,
+        temperature:
+          Number.isFinite(record.temperature) ? record.temperature : null, // Uso de Number.isFinite
+        profile_id:
+          record.profile_id !== undefined ? record.profile_id : null,
       }));
   };
 
@@ -146,14 +160,16 @@ function HealthFever() {
 
       // Sanitizar os registros recebidos
       const sanitizedRecords = sanitizeRecords(response.data);
-      console.log("Registros Sanitizados:", sanitizedRecords); // Log para depuração
+      console.log('Registros Sanitizados:', sanitizedRecords); // Log para depuração
 
       // Filtrar registros indefinidos ou nulos
-      const filteredRecords = sanitizedRecords.filter(record => record !== null && record !== undefined);
+      const filteredRecords = sanitizedRecords.filter(
+        (record) => record !== null && record !== undefined
+      );
       setRecords(filteredRecords);
     } catch (error) {
       toast.error('Erro ao carregar registros.');
-      console.error('Erro ao carregar registros:', error);
+      console.error('Erro ao carregar registros:', error.response?.data || error);
     } finally {
       setLoading(false);
     }
@@ -166,7 +182,7 @@ function HealthFever() {
       setDiseases(response.data);
     } catch (error) {
       toast.error('Erro ao carregar doenças.');
-      console.error('Erro ao carregar doenças:', error);
+      console.error('Erro ao carregar doenças:', error.response?.data || error);
     }
   };
 
@@ -177,7 +193,7 @@ function HealthFever() {
       setMedications(response.data);
     } catch (error) {
       toast.error('Erro ao carregar medicações.');
-      console.error('Erro ao carregar medicações:', error);
+      console.error('Erro ao carregar medicações:', error.response?.data || error);
     }
   };
 
@@ -195,10 +211,12 @@ function HealthFever() {
         });
       } else {
         // Encontrar as datas de início e fim da doença selecionada
-        const selectedDisease = diseases.find(d => d.id === value);
+        const selectedDisease = diseases.find((d) => d.id === value);
         if (selectedDisease) {
-          const startDate = FormatDate(selectedDisease.start_date);
-          const endDate = selectedDisease.end_date ? FormatDate(selectedDisease.end_date) : getCurrentDateTimeLocal().slice(0, 10);
+          const startDate = formatDate(selectedDisease.start_date);
+          const endDate = selectedDisease.end_date
+            ? formatDate(selectedDisease.end_date)
+            : getCurrentDateTimeLocal().slice(0, 10);
           setFilters({
             ...filters,
             diseaseID: value,
@@ -212,17 +230,15 @@ function HealthFever() {
     }
   };
 
-  // Função para aplicar os filtros
-  const handleFilter = () => {
-    fetchRecords();
-  };
+  // Função para aplicar os filtros (Botão "Filtrar")
+  // Removida pois não é mais necessária
+  // const handleFilter = () => {
+  //   fetchRecords();
+  // };
 
   // Função para formatar date_time no formato "YYYY-MM-DDTHH:MM"
-  const formatDateTime = (dateTimeStr) => {
-    if (!dateTimeStr) {
-      return getCurrentDateTimeLocal(); // Fallback para data/hora atual
-    }
-    return dateTimeStr.slice(0, 16); // "YYYY-MM-DDTHH:MM"
+  const formatDateTimeFunc = (dateTimeStr) => {
+    return formatDateTime(dateTimeStr);
   };
 
   // Handler para abrir o diálogo de adicionar registro e definir a data/hora atual
@@ -243,20 +259,29 @@ function HealthFever() {
       return;
     }
 
+    // Validação da Temperatura
+    if (newRecord.temperature === '') {
+      toast.error('A temperatura é obrigatória.');
+      return;
+    }
+    const tempValue = parseFloat(newRecord.temperature);
+    if (isNaN(tempValue) || tempValue < 30 || tempValue > 45) { // Ajuste os limites conforme necessário
+      toast.error('Insira uma temperatura válida.');
+      return;
+    }
+
     setSaving(true);
     try {
       const payload = {
-        profile_id: parseInt(profileId),
-        temperature: newRecord.temperature
-          ? parseFloat(newRecord.temperature)
-          : null,
+        profile_id: parseInt(profileId, 10),
+        temperature: tempValue, // Já garantimos que é um número válido ou 0
         medication: newRecord.medication || null,
-        date_time: formatDateTime(newRecord.date_time),
+        date_time: formatDateTimeFunc(newRecord.date_time),
       };
 
       await api.addFeverMedication(payload);
       toast.success('Registro adicionado com sucesso!');
-      fetchRecords();
+      // fetchRecords(); // Removido para evitar chamada duplicada
       setAddDialogOpen(false);
       setNewRecord({
         temperature: '',
@@ -267,7 +292,7 @@ function HealthFever() {
       const errorMsg =
         error.response?.data?.error || 'Erro ao adicionar registro.';
       toast.error(errorMsg);
-      console.error('Erro ao adicionar registro:', error);
+      console.error('Erro ao adicionar registro:', error.response?.data || error);
     } finally {
       setSaving(false);
     }
@@ -275,12 +300,7 @@ function HealthFever() {
 
   // Função para formatar os timestamps para "YYYY-MM-DD"
   const formatTimestampToDate = (timestamp) => {
-    const date = new Date(timestamp);
-    const pad = (num) => String(num).padStart(2, '0');
-    const year = date.getFullYear();
-    const month = pad(date.getMonth() + 1);
-    const day = pad(date.getDate());
-    return `${year}-${month}-${day}`;
+    return formatDate(timestamp);
   };
 
   // Manipulador do Slider
@@ -294,16 +314,6 @@ function HealthFever() {
       endDate: newEndDate,
       diseaseID: '', // Resetar filtro de doença quando o slider muda
     });
-  };
-
-  // Função para formatar uma data para "YYYY-MM-DD"
-  const formatDate = (date) => {
-    const d = new Date(date);
-    const pad = (num) => String(num).padStart(2, '0');
-    const year = d.getFullYear();
-    const month = pad(d.getMonth() + 1);
-    const day = pad(d.getDate());
-    return `${year}-${month}-${day}`;
   };
 
   // Handlers para Edição
@@ -321,22 +331,33 @@ function HealthFever() {
   };
 
   const saveEdit = async () => {
+    // Validação da Temperatura
+    if (recordToEdit.temperature === '') {
+      toast.error('A temperatura é obrigatória.');
+      return;
+    }
+    const tempValue = parseFloat(recordToEdit.temperature);
+    if (isNaN(tempValue) || tempValue < 30 || tempValue > 45) { // Ajuste os limites conforme necessário
+      toast.error('Insira uma temperatura válida.');
+      return;
+    }
+
     try {
       const payload = {
-        temperature: recordToEdit.temperature !== '' ? parseFloat(recordToEdit.temperature) : null,
+        temperature: tempValue, // Já garantimos que é um número válido ou 0
         medication: recordToEdit.medication || null,
         date_time: formatDateTime(recordToEdit.date_time), // Garantir o formato correto
       };
       await api.updateFeverMedication(recordToEdit.id, payload);
       toast.success('Registro atualizado com sucesso!');
-      fetchRecords(); // Recarregar os registros
+      // fetchRecords(); // Removido para evitar chamada duplicada
+      setRecordToEdit(null);
+      setEditDialogOpen(false);
     } catch (error) {
       const errorMsg =
         error.response?.data?.error || 'Erro ao atualizar registro.';
       toast.error(errorMsg);
-      console.error('Erro ao atualizar registro:', error);
-    } finally {
-      handleEditDialogClose();
+      console.error('Erro ao atualizar registro:', error.response?.data || error);
     }
   };
 
@@ -355,32 +376,31 @@ function HealthFever() {
     try {
       await api.deleteFeverMedication(recordToDelete.id);
       toast.success('Registro apagado com sucesso!');
-      fetchRecords(); // Recarregar os registros
+      // fetchRecords(); // Removido para evitar chamada duplicada
+      setDeleteDialogOpen(false);
+      setRecordToDelete(null);
     } catch (error) {
       const errorMsg =
         error.response?.data?.error || 'Erro ao apagar registro.';
       toast.error(errorMsg);
-      console.error('Erro ao apagar registro:', error);
-    } finally {
-      handleDeleteDialogClose();
+      console.error('Erro ao apagar registro:', error.response?.data || error);
     }
   };
 
+  // useEffect para buscar doenças e medicações inicialmente
   useEffect(() => {
-    fetchRecords();
     fetchDiseases();
     fetchMedications();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // useEffect para buscar registros sempre que os filtros mudarem
   useEffect(() => {
-    // Atualizar o dateRange quando os filtros são atualizados programaticamente
-    const newStartTimestamp = new Date(filters.startDate).getTime();
-    const newEndTimestamp = new Date(filters.endDate).getTime();
-    setDateRange([newStartTimestamp, newEndTimestamp]);
+    fetchRecords();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.startDate, filters.endDate]);
+  }, [filters]);
 
+  // Definição das colunas da tabela
   const columns = [
     {
       field: 'date_time',
@@ -400,13 +420,21 @@ function HealthFever() {
       field: 'temperature',
       headerName: 'Temperatura (°C)',
       flex: 1,
+      valueFormatter: (params) => {
+        console.log('Temperature raw value:', params.value); // Para depuração
+        const temp = Number(params.value);
+
+        if (temp === 0 || temp === null || temp === undefined) return ''; // Exibir string vazia para 0, null ou undefined
+        if (Number.isFinite(temp) && temp > 0) return temp.toFixed(1); // Exibir valor com uma casa decimal
+        return ''; // Exibir string vazia para valores inválidos ou ausentes
+      },
     },
     {
       field: 'medication',
       headerName: 'Medicação',
       flex: 1,
       renderCell: (params) => {
-        return params?.row?.medication ? params.row.medication : 'N/A';
+        return params?.row?.medication ? params.row.medication : '';
       },
     },
     {
@@ -414,7 +442,7 @@ function HealthFever() {
       headerName: 'Doença',
       flex: 1,
       renderCell: (params) => {
-        return params?.row?.disease_name ? params.row.disease_name : 'N/A';
+        return params?.row?.disease_name ? params.row.disease_name : '';
       },
     },
     {
@@ -499,9 +527,7 @@ function HealthFever() {
           </FormControl>
         </Grid>
         <Grid item xs={12}>
-          <Button variant="contained" color="primary" onClick={handleFilter}>
-            Filtrar
-          </Button>
+          {/* Removido o botão "Filtrar" */}
           <Button
             variant="outlined"
             color="secondary"
@@ -526,7 +552,10 @@ function HealthFever() {
           min={new Date(getThirtyDaysAgoDate()).getTime()}
           max={new Date(getCurrentDateTimeLocal()).getTime()}
           marks={[
-            { value: new Date(getThirtyDaysAgoDate()).getTime(), label: '30 dias atrás' },
+            {
+              value: new Date(getThirtyDaysAgoDate()).getTime(),
+              label: '30 dias atrás',
+            },
             { value: new Date(getYesterdayDate()).getTime(), label: 'Ontem' },
             { value: new Date(getCurrentDateTimeLocal()).getTime(), label: 'Hoje' },
           ]}
@@ -715,11 +744,7 @@ function HealthFever() {
           <Button onClick={handleEditDialogClose} color="secondary">
             Cancelar
           </Button>
-          <Button
-            onClick={saveEdit}
-            color="primary"
-            variant="contained"
-          >
+          <Button onClick={saveEdit} color="primary" variant="contained">
             Salvar
           </Button>
         </DialogActions>

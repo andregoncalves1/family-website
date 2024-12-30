@@ -38,7 +38,7 @@ function FeverMedicationChart({ startDate, endDate, diseaseID }) {
   const getMedicationColor = (medName, medications) => {
     const med = medications.find((m) => m.name === medName);
     if (med && med.color) {
-      const color = hexToRGBA(med.color, 0.3); // 30% de opacidade
+      const color = hexToRGBA(med.color, 0.8);
       console.log(`Medicação: ${medName}, Cor: ${color}`);
       return color;
     }
@@ -126,7 +126,7 @@ function FeverMedicationChart({ startDate, endDate, diseaseID }) {
     const febreAnnotations = thresholds.map((threshold) => ({
       y: threshold.min_temp,
       y2: threshold.max_temp,
-      fillColor: hexToRGBA(threshold.color, 0.1), // Cor com baixa opacidade
+      fillColor: hexToRGBA(threshold.color, 1.0), // Cor com baixa opacidade
       opacity: 0.1,
       borderWidth: 0,
     }));
