@@ -55,7 +55,9 @@ function Management() {
   const fetchMedications = async () => {
     setMedLoading(true);
     try {
-      const response = await api.getMedications();
+      // ADIÇÃO: ler profileId
+      const profileId = localStorage.getItem('currentProfileId');
+      const response = await api.getMedications(profileId);
       setMedications(response.data);
     } catch (error) {
       toast.error('Erro ao carregar medicações.');
@@ -68,7 +70,9 @@ function Management() {
   const fetchThresholds = async () => {
     setFtLoading(true);
     try {
-      const response = await api.getFeverThresholds();
+      // ADIÇÃO: ler profileId
+      const profileId = localStorage.getItem('currentProfileId');
+      const response = await api.getFeverThresholds(profileId);
       setThresholds(response.data);
     } catch (error) {
       toast.error('Erro ao carregar Fever Thresholds.');
@@ -83,7 +87,7 @@ function Management() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // User Management
+  // ================== USER MANAGEMENT ==================
   const handleCreateUser = async () => {
     if (!newUser.username || !newUser.password) {
       toast.error('Preencha todos os campos de usuário.');
@@ -103,7 +107,7 @@ function Management() {
     }
   };
 
-  // Profile Management
+  // ================== PROFILE MANAGEMENT ==================
   const handleCreateProfile = async () => {
     if (!newProfile.name) {
       toast.error('Preencha o nome do perfil.');
@@ -123,7 +127,7 @@ function Management() {
     }
   };
 
-  // Medication Management
+  // ================== MEDICATION MANAGEMENT ==================
   const handleOpenMedDialog = () => {
     setEditingMed(false);
     setCurrentMed({ id: null, name: '', color: '' });
@@ -148,11 +152,25 @@ function Management() {
     }
     setSavingMed(true);
     try {
+      // ADIÇÃO: ler profileId
+      const profileId = localStorage.getItem('currentProfileId');
+      if (!profileId) {
+        toast.error('Nenhum perfil selecionado.');
+        setSavingMed(false);
+        return;
+      }
+
+      const payload = {
+        name,
+        color: color.replace('#', ''),
+        profile_id: parseInt(profileId, 10), // ADIÇÃO
+      };
+
       if (editingMed) {
-        await api.updateMedication(id, { name, color: color.replace('#', '') });
+        await api.updateMedication(id, payload);
         toast.success('Medicação atualizada com sucesso!');
       } else {
-        await api.addMedication({ name, color: color.replace('#', '') });
+        await api.addMedication(payload);
         toast.success('Medicação adicionada com sucesso!');
       }
       fetchMedications();
@@ -181,7 +199,7 @@ function Management() {
     }
   };
 
-  // Fever Threshold Management
+  // ================== FEVER THRESHOLD MANAGEMENT ==================
   const handleOpenFTDialog = () => {
     setEditingFT(false);
     setCurrentFT({
@@ -227,11 +245,20 @@ function Management() {
     }
     setSavingFT(true);
     try {
+      // ADIÇÃO: ler profileId
+      const profileId = localStorage.getItem('currentProfileId');
+      if (!profileId) {
+        toast.error('Nenhum perfil selecionado.');
+        setSavingFT(false);
+        return;
+      }
+
       const payload = {
         label,
         min_temp: parseFloat(min_temp),
         max_temp: parseFloat(max_temp),
         color: color.replace('#', ''),
+        profile_id: parseInt(profileId, 10), // ADIÇÃO
       };
       if (editingFT) {
         await api.updateFeverThreshold(id, payload);
@@ -253,9 +280,7 @@ function Management() {
   };
 
   const handleDeleteFT = async (id) => {
-    if (
-      !window.confirm('Tem certeza que deseja deletar esta Fever Threshold?')
-    ) {
+    if (!window.confirm('Tem certeza que deseja deletar esta Fever Threshold?')) {
       return;
     }
     try {

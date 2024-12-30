@@ -47,9 +47,11 @@ function HealthDiseases() {
   const fetchDiseases = async () => {
     setLoading(true);
     try {
-      const response = await api.getDiseases();
+      // ADIÇÃO: ler profileId
+      const profileId = localStorage.getItem('currentProfileId');
+      const response = await api.getDiseases(profileId);
       const sanitizedDiseases = sanitizeDiseases(response.data);
-      console.log('Doenças Sanitizadas:', sanitizedDiseases); // Log para depuração
+      console.log('Doenças Sanitizadas:', sanitizedDiseases);
       setDiseases(sanitizedDiseases);
     } catch (error) {
       toast.error('Erro ao carregar doenças.');
@@ -88,6 +90,14 @@ function HealthDiseases() {
   const handleSave = async () => {
     setSaving(true);
     try {
+      // ADIÇÃO: ler profileId
+      const profileId = localStorage.getItem('currentProfileId');
+      if (!profileId) {
+        toast.error('Nenhum perfil selecionado.');
+        setSaving(false);
+        return;
+      }
+
       const payload = {
         name: currentDisease.name,
         start_date: currentDisease.start_date
@@ -96,6 +106,7 @@ function HealthDiseases() {
         end_date: currentDisease.end_date
           ? new Date(currentDisease.end_date).toISOString()
           : null,
+        profile_id: parseInt(profileId, 10), // ADIÇÃO
       };
 
       let response;
@@ -107,7 +118,7 @@ function HealthDiseases() {
         toast.success('Doença adicionada com sucesso!');
       }
 
-      console.log('Resposta da API:', response.data); // Log para depuração
+      console.log('Resposta da API:', response.data);
       fetchDiseases();
       handleClose();
     } catch (error) {
@@ -145,30 +156,30 @@ function HealthDiseases() {
     { field: 'id', headerName: 'ID', width: 70 },
     { field: 'name', headerName: 'Nome', flex: 1 },
     {
-        field: 'start_date',
-        headerName: 'Data Início',
-        flex: 1,
-        renderCell: (params) => {
-          const date = params.row.start_date ? new Date(params.row.start_date) : null;
-          return (
-            <span>
-              {date && !isNaN(date) ? date.toLocaleString() : 'N/A'}
-            </span>
-          );
-        },
+      field: 'start_date',
+      headerName: 'Data Início',
+      flex: 1,
+      renderCell: (params) => {
+        const date = params.row.start_date ? new Date(params.row.start_date) : null;
+        return (
+          <span>
+            {date && !isNaN(date) ? date.toLocaleString() : 'N/A'}
+          </span>
+        );
+      },
     },
     {
-        field: 'end_date',
-        headerName: 'Data Fim',
-        flex: 1,
-        renderCell: (params) => {
-          const date = params.row.end_date ? new Date(params.row.end_date) : null;
-          return (
-            <span>
-              {date && !isNaN(date) ? date.toLocaleString() : 'Em curso...'}
-            </span>
-          );
-        },
+      field: 'end_date',
+      headerName: 'Data Fim',
+      flex: 1,
+      renderCell: (params) => {
+        const date = params.row.end_date ? new Date(params.row.end_date) : null;
+        return (
+          <span>
+            {date && !isNaN(date) ? date.toLocaleString() : 'Em curso...'}
+          </span>
+        );
+      },
     },
     {
       field: 'actions',

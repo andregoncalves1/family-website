@@ -17,9 +17,8 @@ import (
 	"github.com/phpdave11/gofpdf"
 )
 
-// loginHandler trata o login do utilizador
+// loginHandler (igual ao teu atual, sem a criação de profile "exemplo" automática)
 func loginHandler(c *gin.Context) {
-
 	log.Println("Login Handler.")
 
 	var req struct {
@@ -51,13 +50,31 @@ func loginHandler(c *gin.Context) {
 		return
 	}
 
-	// Verificar senha com hash
+	// Verificar senha
 	if !checkPasswordHash(req.Password, user.Password) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Senha incorreta"})
 		return
 	}
 
-	// Gerar token
+	// Verificar se o user possui perfis. Caso não tenha, criar "exemplo".
+	var count int
+	err := db.QueryRow("SELECT COUNT(*) FROM profiles WHERE user_id=$1", user.ID).Scan(&count)
+	if err != nil {
+		log.Printf("Erro ao verificar perfis do usuário: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao verificar perfis"})
+		return
+	}
+	if count == 0 {
+		log.Printf("Usuário '%s' (ID %d) não possui perfis. Criando 'exemplo'...", user.Username, user.ID)
+		_, err = db.Exec("INSERT INTO profiles (name, user_id) VALUES ($1, $2)", "exemplo", user.ID)
+		if err != nil {
+			log.Printf("Erro ao criar profile 'exemplo': %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao criar perfil padrão"})
+			return
+		}
+	}
+
+	// Gerar token JWT
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": user.ID,
 		"exp": time.Now().Add(time.Hour * 24).Unix(),
@@ -69,11 +86,10 @@ func loginHandler(c *gin.Context) {
 	}
 
 	log.Println("Fim de login Handler.")
-
 	c.JSON(http.StatusOK, gin.H{"token": tokenStr})
 }
 
-// createUser cria um novo utilizador
+// createUser (igual ao teu)
 func createUser(c *gin.Context) {
 	var req User
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -90,14 +106,12 @@ func createUser(c *gin.Context) {
 		return
 	}
 
-	// Hash da senha
 	hashedPassword, err := hashPassword(req.Password)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao processar senha"})
 		return
 	}
 
-	// Inserir utilizador no banco de dados
 	_, err = db.Exec("INSERT INTO users (username, password) VALUES ($1, $2)", req.Username, hashedPassword)
 	if err != nil {
 		log.Printf("Erro ao criar utilizador: %v", err)
@@ -108,9 +122,20 @@ func createUser(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Utilizador criado com sucesso"})
 }
 
-// getProfiles obtém todos os perfis
+// =============================
+//          PERFIS
+// =============================
+
+// getProfiles obtém todos os perfis do usuário logado
 func getProfiles(c *gin.Context) {
-	rows, err := db.Query("SELECT id, name FROM profiles")
+	userIDAny, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Token inválido"})
+		return
+	}
+	userID := userIDAny.(int)
+
+	rows, err := db.Query("SELECT id, name, user_id FROM profiles WHERE user_id=$1", userID)
 	if err != nil {
 		log.Printf("Erro ao obter perfis: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao obter perfis"})
@@ -121,7 +146,7 @@ func getProfiles(c *gin.Context) {
 	var profiles []Profile
 	for rows.Next() {
 		var p Profile
-		if err := rows.Scan(&p.ID, &p.Name); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.UserID); err != nil {
 			log.Println("Erro ao escanear perfil:", err)
 			continue
 		}
@@ -131,8 +156,15 @@ func getProfiles(c *gin.Context) {
 	c.JSON(http.StatusOK, profiles)
 }
 
-// createProfile cria um novo perfil
+// createProfile cria um novo perfil para o usuário logado
 func createProfile(c *gin.Context) {
+	userIDAny, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Token inválido"})
+		return
+	}
+	userID := userIDAny.(int)
+
 	var req Profile
 	if err := c.ShouldBindJSON(&req); err != nil {
 		var ve validator.ValidationErrors
@@ -148,7 +180,7 @@ func createProfile(c *gin.Context) {
 		return
 	}
 
-	_, err := db.Exec("INSERT INTO profiles (name) VALUES ($1)", req.Name)
+	_, err := db.Exec("INSERT INTO profiles (name, user_id) VALUES ($1, $2)", req.Name, userID)
 	if err != nil {
 		log.Printf("Erro ao criar perfil: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Erro ao criar perfil"})
@@ -158,11 +190,21 @@ func createProfile(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Perfil criado com sucesso"})
 }
 
-// getProfileByID obtém um perfil por ID
+// getProfileByID obtém um perfil por ID, mas só se pertencer ao user logado
 func getProfileByID(c *gin.Context) {
+	userIDAny, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Token inválido"})
+		return
+	}
+	userID := userIDAny.(int)
+
 	id := c.Param("id")
 	var p Profile
-	err := db.QueryRow("SELECT id, name FROM profiles WHERE id=$1", id).Scan(&p.ID, &p.Name)
+	err := db.QueryRow(
+		"SELECT id, name, user_id FROM profiles WHERE id=$1 AND user_id=$2",
+		id, userID,
+	).Scan(&p.ID, &p.Name, &p.UserID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Perfil não encontrado"})
@@ -176,8 +218,15 @@ func getProfileByID(c *gin.Context) {
 	c.JSON(http.StatusOK, p)
 }
 
-// updateProfile atualiza um perfil por ID
+// updateProfile atualiza um perfil, mas só se pertencer ao user logado
 func updateProfile(c *gin.Context) {
+	userIDAny, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Token inválido"})
+		return
+	}
+	userID := userIDAny.(int)
+
 	id := c.Param("id")
 	var req Profile
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -194,7 +243,10 @@ func updateProfile(c *gin.Context) {
 		return
 	}
 
-	result, err := db.Exec("UPDATE profiles SET name=$1 WHERE id=$2", req.Name, id)
+	result, err := db.Exec(
+		"UPDATE profiles SET name=$1 WHERE id=$2 AND user_id=$3",
+		req.Name, id, userID,
+	)
 	if err != nil {
 		log.Printf("Erro ao atualizar perfil: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Erro ao atualizar perfil"})
@@ -208,17 +260,24 @@ func updateProfile(c *gin.Context) {
 	}
 
 	if rowsAffected == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Perfil não encontrado"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "Perfil não encontrado ou não pertence a você"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Perfil atualizado com sucesso"})
 }
 
-// deleteProfile deleta um perfil por ID
+// deleteProfile deleta um perfil, mas só se pertencer ao user logado
 func deleteProfile(c *gin.Context) {
+	userIDAny, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Token inválido"})
+		return
+	}
+	userID := userIDAny.(int)
+
 	id := c.Param("id")
-	result, err := db.Exec("DELETE FROM profiles WHERE id=$1", id)
+	result, err := db.Exec("DELETE FROM profiles WHERE id=$1 AND user_id=$2", id, userID)
 	if err != nil {
 		log.Printf("Erro ao deletar perfil: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Erro ao deletar perfil"})
@@ -232,7 +291,7 @@ func deleteProfile(c *gin.Context) {
 	}
 
 	if rowsAffected == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Perfil não encontrado"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "Perfil não encontrado ou não pertence a você"})
 		return
 	}
 
@@ -244,89 +303,58 @@ func getFeverMedication(c *gin.Context) {
 	// Obter parâmetros de consulta
 	startDate := c.Query("start")
 	endDate := c.Query("end")
-	diseaseID := c.Query("diseaseID")
+	profileID := c.Query("profile_id")
 
-	var query string
-	var args []interface{}
-	var records []map[string]interface{}
-
-	if diseaseID != "" {
-		// Obter as datas da doença selecionada
-		var diseaseName string
-		var start_date, end_date sql.NullTime
-		err := db.QueryRow("SELECT name, start_date, end_date FROM diseases WHERE id = $1", diseaseID).Scan(&diseaseName, &start_date, &end_date)
-		if err != nil {
-			if err == sql.ErrNoRows {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "Doença não encontrada"})
-				return
-			}
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao buscar doença"})
-			return
-		}
-
-		// Definir o intervalo de datas da doença
-		start := FormatDate(start_date.Time)
-		end := ""
-		if end_date.Valid {
-			end = FormatDate(end_date.Time)
-		} else {
-			end = GetTodayDate()
-		}
-
-		// Incrementar o end para o próximo dia para incluir todos os registros do dia final
-		endTime, err := time.Parse("2006-01-02", end)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Formato de data inválido para endDate"})
-			return
-		}
-		endTime = endTime.AddDate(0, 0, 1) // Adicionar 1 dia
-		formattedEnd := endTime.Format("2006-01-02")
-
-		// Consulta para buscar registros dentro do intervalo de datas da doença
-		query = `
-			SELECT r.id, r.profile_id, r.temperature, r.medication, r.date_time, d.name as disease_name
-			FROM fever_medication_records r
-			LEFT JOIN diseases d
-			  ON r.date_time BETWEEN d.start_date AND COALESCE(d.end_date, NOW())
-			WHERE r.date_time >= $1 AND r.date_time < $2
-			ORDER BY r.date_time DESC
-		`
-		args = append(args, start, formattedEnd)
-	} else {
-		// Sem filtro de doença, usar startDate e endDate fornecidos
-		if startDate == "" || endDate == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Parâmetros de data 'start' e 'end' são obrigatórios"})
-			return
-		}
-
-		// Incrementar o endDate para o próximo dia para incluir todos os registros do dia final
-		endTime, err := time.Parse("2006-01-02", endDate)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Formato de data inválido para endDate"})
-			return
-		}
-		endTime = endTime.AddDate(0, 0, 1) // Adicionar 1 dia
-		formattedEnd := endTime.Format("2006-01-02")
-
-		// Consulta para buscar registros dentro do intervalo de datas fornecido
-		query = `
-			SELECT r.id, r.profile_id, r.temperature, r.medication, r.date_time, d.name as disease_name
-			FROM fever_medication_records r
-			LEFT JOIN diseases d
-			  ON r.date_time BETWEEN d.start_date AND COALESCE(d.end_date, NOW())
-			WHERE r.date_time >= $1 AND r.date_time < $2
-			ORDER BY r.date_time DESC
-		`
-		args = append(args, startDate, formattedEnd)
+	if profileID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Parâmetro 'profile_id' é obrigatório"})
+		return
+	}
+	if startDate == "" || endDate == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Parâmetros 'start' e 'end' são obrigatórios"})
+		return
 	}
 
-	rows, err := db.Query(query, args...)
+	// Incrementar endDate em 1 dia para incluir o final do dia
+	endTime, err := time.Parse("2006-01-02", endDate)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Formato de data inválido para 'end'"})
+		return
+	}
+	endTime = endTime.AddDate(0, 0, 1)
+	formattedEnd := endTime.Format("2006-01-02")
+
+	// =============================
+	// AJUSTE: LEFT JOIN com diseases
+	// =============================
+	query := `
+SELECT 
+  r.id,
+  r.profile_id,
+  r.temperature,
+  r.medication,
+  r.date_time,
+  COALESCE(d.name, '') AS disease_name
+FROM fever_medication_records r
+LEFT JOIN diseases d
+       ON r.profile_id = d.profile_id
+      AND r.date_time >= d.start_date
+      AND (
+          d.end_date IS NULL
+          OR r.date_time <= d.end_date
+      )
+WHERE r.profile_id = $1
+  AND r.date_time >= $2
+  AND r.date_time < $3
+ORDER BY r.date_time DESC
+`
+	rows, err := db.Query(query, profileID, startDate, formattedEnd)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao buscar registros"})
 		return
 	}
 	defer rows.Close()
 
+	var records []map[string]interface{}
 	for rows.Next() {
 		var record struct {
 			ID          int             `json:"id"`
@@ -336,12 +364,18 @@ func getFeverMedication(c *gin.Context) {
 			DateTime    string          `json:"date_time"`
 			DiseaseName sql.NullString  `json:"disease_name"`
 		}
-		if err := rows.Scan(&record.ID, &record.ProfileID, &record.Temperature, &record.Medication, &record.DateTime, &record.DiseaseName); err != nil {
+		if err := rows.Scan(
+			&record.ID,
+			&record.ProfileID,
+			&record.Temperature,
+			&record.Medication,
+			&record.DateTime,
+			&record.DiseaseName,
+		); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao processar registros"})
 			return
 		}
 
-		// Preparar o mapa para JSON
 		recordMap := map[string]interface{}{
 			"id":          record.ID,
 			"profile_id":  record.ProfileID,
@@ -352,7 +386,7 @@ func getFeverMedication(c *gin.Context) {
 				if record.DiseaseName.Valid {
 					return record.DiseaseName.String
 				}
-				return "N/A"
+				return ""
 			}(),
 		}
 
@@ -376,7 +410,6 @@ func addFeverMedication(c *gin.Context) {
 		return
 	}
 
-	// Inserir o registro sem disease_id
 	query := `
 		INSERT INTO fever_medication_records (profile_id, temperature, medication, date_time)
 		VALUES ($1, $2, $3, $4)
@@ -407,11 +440,10 @@ func updateFeverMedication(c *gin.Context) {
 		return
 	}
 
-	// Atualizar o registro sem disease_id
 	query := `
 		UPDATE fever_medication_records
-		SET temperature = $1, medication = $2, date_time = $3
-		WHERE id = $4
+		   SET temperature = $1, medication = $2, date_time = $3
+		 WHERE id = $4
 	`
 	res, err := db.Exec(query, payload.Temperature, payload.Medication, payload.DateTime, id)
 	if err != nil {
@@ -435,21 +467,18 @@ func updateFeverMedication(c *gin.Context) {
 
 // deleteFeverMedication apaga um registro existente de febre e medicação
 func deleteFeverMedication(c *gin.Context) {
-	// Obter o ID do registro a partir dos parâmetros da URL
 	idParam := c.Param("id")
 	if idParam == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ID do registro é obrigatório"})
 		return
 	}
 
-	// Converter o ID para inteiro
 	id, err := strconv.Atoi(idParam)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ID do registro inválido"})
 		return
 	}
 
-	// Executar a consulta de exclusão
 	result, err := db.Exec("DELETE FROM fever_medication_records WHERE id=$1", id)
 	if err != nil {
 		log.Printf("Erro ao apagar registro: %v", err)
@@ -471,9 +500,15 @@ func deleteFeverMedication(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Registro apagado com sucesso"})
 }
 
-// getDiseases obtém todas as doenças
+// getDiseases obtém todas as doenças para um profile_id
 func getDiseases(c *gin.Context) {
-	rows, err := db.Query("SELECT id, name, start_date, end_date FROM diseases")
+	profileID := c.Query("profile_id")
+	if profileID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Parâmetro 'profile_id' é obrigatório"})
+		return
+	}
+
+	rows, err := db.Query("SELECT id, name, start_date, end_date, profile_id FROM diseases WHERE profile_id = $1", profileID)
 	if err != nil {
 		log.Printf("Erro ao obter doenças: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao obter doenças"})
@@ -484,7 +519,7 @@ func getDiseases(c *gin.Context) {
 	var diseases []Disease
 	for rows.Next() {
 		var d Disease
-		if err := rows.Scan(&d.ID, &d.Name, &d.StartDate, &d.EndDate); err != nil {
+		if err := rows.Scan(&d.ID, &d.Name, &d.StartDate, &d.EndDate, &d.ProfileID); err != nil {
 			log.Println("Erro ao escanear doença:", err)
 			continue
 		}
@@ -520,7 +555,10 @@ func addDisease(c *gin.Context) {
 		return
 	}
 
-	_, err := db.Exec("INSERT INTO diseases (name, start_date, end_date) VALUES ($1, $2, $3)", req.Name, req.StartDate, req.EndDate)
+	_, err := db.Exec(
+		"INSERT INTO diseases (name, start_date, end_date, profile_id) VALUES ($1, $2, $3, $4)",
+		req.Name, req.StartDate, req.EndDate, req.ProfileID,
+	)
 	if err != nil {
 		log.Printf("Erro ao adicionar doença: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Erro ao adicionar doença"})
@@ -553,7 +591,10 @@ func updateDisease(c *gin.Context) {
 		return
 	}
 
-	result, err := db.Exec("UPDATE diseases SET name=$1, start_date=$2, end_date=$3 WHERE id=$4", req.Name, req.StartDate, req.EndDate, id)
+	result, err := db.Exec(
+		"UPDATE diseases SET name=$1, start_date=$2, end_date=$3, profile_id=$4 WHERE id=$5",
+		req.Name, req.StartDate, req.EndDate, req.ProfileID, id,
+	)
 	if err != nil {
 		log.Printf("Erro ao atualizar doença: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Erro ao atualizar doença"})
@@ -598,9 +639,15 @@ func deleteDisease(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Doença deletada com sucesso"})
 }
 
-// getMedications obtém todas as medicações
+// getMedications obtém todas as medicações para o profile_id
 func getMedications(c *gin.Context) {
-	rows, err := db.Query("SELECT id, name, color FROM medications")
+	profileID := c.Query("profile_id")
+	if profileID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Parâmetro 'profile_id' é obrigatório"})
+		return
+	}
+
+	rows, err := db.Query("SELECT id, name, color, profile_id FROM medications WHERE profile_id = $1", profileID)
 	if err != nil {
 		log.Printf("Erro ao obter medicações: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao obter medicações"})
@@ -611,7 +658,7 @@ func getMedications(c *gin.Context) {
 	var medications []Medication
 	for rows.Next() {
 		var m Medication
-		if err := rows.Scan(&m.ID, &m.Name, &m.Color); err != nil {
+		if err := rows.Scan(&m.ID, &m.Name, &m.Color, &m.ProfileID); err != nil {
 			log.Println("Erro ao escanear medicação:", err)
 			continue
 		}
@@ -633,7 +680,7 @@ func addMedication(c *gin.Context) {
 		if errors.As(err, &ve) {
 			out := make([]string, len(ve))
 			for i, fe := range ve {
-				out[i] = fmt.Sprintf("Campo '%s' falhou na validação '%s' - %s", fe.Field(), fe.Tag(), req.Color)
+				out[i] = fmt.Sprintf("Campo '%s' falhou na validação '%s'", fe.Field(), fe.Tag())
 			}
 			c.JSON(http.StatusBadRequest, gin.H{"errors": out})
 			return
@@ -642,7 +689,8 @@ func addMedication(c *gin.Context) {
 		return
 	}
 
-	_, err := db.Exec("INSERT INTO medications (name, color) VALUES ($1, $2)", req.Name, req.Color)
+	_, err := db.Exec("INSERT INTO medications (name, color, profile_id) VALUES ($1, $2, $3)",
+		req.Name, req.Color, req.ProfileID)
 	if err != nil {
 		log.Printf("Erro ao adicionar medicação: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Erro ao adicionar medicação"})
@@ -670,7 +718,8 @@ func updateMedication(c *gin.Context) {
 		return
 	}
 
-	_, err := db.Exec("UPDATE medications SET name=$1, color=$2 WHERE id=$3", req.Name, req.Color, id)
+	_, err := db.Exec("UPDATE medications SET name=$1, color=$2, profile_id=$3 WHERE id=$4",
+		req.Name, req.Color, req.ProfileID, id)
 	if err != nil {
 		log.Printf("Erro ao atualizar medicação: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Erro ao atualizar medicação"})
@@ -704,9 +753,15 @@ func deleteMedication(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Medicação deletada com sucesso"})
 }
 
-// getFeverThresholds obtém todas as Fever Thresholds
+// getFeverThresholds obtém todas as Fever Thresholds para um profile_id
 func getFeverThresholds(c *gin.Context) {
-	rows, err := db.Query("SELECT id, label, min_temp, max_temp, color FROM fever_thresholds ORDER BY min_temp ASC")
+	profileID := c.Query("profile_id")
+	if profileID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Parâmetro 'profile_id' é obrigatório"})
+		return
+	}
+
+	rows, err := db.Query("SELECT id, label, min_temp, max_temp, color, profile_id FROM fever_thresholds WHERE profile_id=$1 ORDER BY min_temp ASC", profileID)
 	if err != nil {
 		log.Printf("Erro ao obter Fever Thresholds: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao obter Fever Thresholds"})
@@ -717,7 +772,7 @@ func getFeverThresholds(c *gin.Context) {
 	var thresholds []FeverThreshold
 	for rows.Next() {
 		var ft FeverThreshold
-		if err := rows.Scan(&ft.ID, &ft.Label, &ft.MinTemp, &ft.MaxTemp, &ft.Color); err != nil {
+		if err := rows.Scan(&ft.ID, &ft.Label, &ft.MinTemp, &ft.MaxTemp, &ft.Color, &ft.ProfileID); err != nil {
 			log.Println("Erro ao escanear Fever Threshold:", err)
 			continue
 		}
@@ -753,7 +808,8 @@ func addFeverThreshold(c *gin.Context) {
 		return
 	}
 
-	_, err := db.Exec("INSERT INTO fever_thresholds (label, min_temp, max_temp, color) VALUES ($1, $2, $3, $4)", req.Label, req.MinTemp, req.MaxTemp, req.Color)
+	_, err := db.Exec("INSERT INTO fever_thresholds (label, min_temp, max_temp, color, profile_id) VALUES ($1, $2, $3, $4, $5)",
+		req.Label, req.MinTemp, req.MaxTemp, req.Color, req.ProfileID)
 	if err != nil {
 		log.Printf("Erro ao adicionar Fever Threshold: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Erro ao adicionar Fever Threshold"})
@@ -786,7 +842,10 @@ func updateFeverThreshold(c *gin.Context) {
 		return
 	}
 
-	result, err := db.Exec("UPDATE fever_thresholds SET label=$1, min_temp=$2, max_temp=$3, color=$4 WHERE id=$5", req.Label, req.MinTemp, req.MaxTemp, req.Color, id)
+	result, err := db.Exec(
+		"UPDATE fever_thresholds SET label=$1, min_temp=$2, max_temp=$3, color=$4, profile_id=$5 WHERE id=$6",
+		req.Label, req.MinTemp, req.MaxTemp, req.Color, req.ProfileID, id,
+	)
 	if err != nil {
 		log.Printf("Erro ao atualizar Fever Threshold: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Erro ao atualizar Fever Threshold"})
@@ -833,36 +892,37 @@ func deleteFeverThreshold(c *gin.Context) {
 
 // generateReportPDF gera um relatório em PDF com o gráfico
 func generateReportPDF(c *gin.Context) {
-	// Filtrar por doença ou intervalo de datas
 	start := c.Query("start")
 	end := c.Query("end")
-	diseaseID := c.Query("disease_id")
+	profileID := c.Query("profile_id")
 
-	// Obter registros
-	query := `SELECT f.id, f.profile_id, f.temperature, f.medication, f.date_time, f.disease_id, d.name as disease_name
-              FROM fever_medication_records f
-              LEFT JOIN diseases d ON f.disease_id = d.id
-              WHERE 1=1`
-	args := []interface{}{}
-	count := 1
+	if profileID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Parâmetro 'profile_id' é obrigatório"})
+		return
+	}
+
+	query := `
+		SELECT f.id, f.profile_id, f.temperature, f.medication, f.date_time, null as disease_id, null as disease_name
+		  FROM fever_medication_records f
+		 WHERE f.profile_id = $1
+	`
+	args := []interface{}{profileID}
 
 	if start != "" {
-		query += fmt.Sprintf(" AND f.date_time >= $%d", count)
+		query += " AND f.date_time >= $2"
 		args = append(args, start)
-		count++
 	}
 	if end != "" {
-		query += fmt.Sprintf(" AND f.date_time <= $%d", count)
+		if start == "" {
+			// Precisamos de $2?
+			query += " AND f.date_time <= $2"
+		} else {
+			query += " AND f.date_time <= $3"
+		}
 		args = append(args, end)
-		count++
-	}
-	if diseaseID != "" {
-		query += fmt.Sprintf(" AND f.disease_id = $%d", count)
-		args = append(args, diseaseID)
-		count++
 	}
 
-	query += ` ORDER BY f.date_time ASC`
+	query += " ORDER BY f.date_time ASC"
 
 	rows, err := db.Query(query, args...)
 	if err != nil {
@@ -883,7 +943,7 @@ func generateReportPDF(c *gin.Context) {
 	}
 
 	// Obter medicações com cores
-	medications, err := getAllMedications()
+	medications, err := getAllMedications(profileID)
 	if err != nil {
 		log.Printf("Erro ao obter medicações: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao obter medicações"})
@@ -891,7 +951,7 @@ func generateReportPDF(c *gin.Context) {
 	}
 
 	// Obter Fever Thresholds
-	thresholds, err := getAllFeverThresholds()
+	thresholds, err := getAllFeverThresholds(profileID)
 	if err != nil {
 		log.Printf("Erro ao obter Fever Thresholds: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao obter Fever Thresholds"})
@@ -986,9 +1046,9 @@ func generateReportPDF(c *gin.Context) {
 	}
 }
 
-// getAllMedications obtém todas as medicações (Função Auxiliar)
-func getAllMedications() ([]Medication, error) {
-	rows, err := db.Query("SELECT id, name, color FROM medications")
+// getAllMedications obtém todas as medicações para um profile_id (Função Auxiliar)
+func getAllMedications(profileID string) ([]Medication, error) {
+	rows, err := db.Query("SELECT id, name, color, profile_id FROM medications WHERE profile_id = $1", profileID)
 	if err != nil {
 		return nil, err
 	}
@@ -997,7 +1057,7 @@ func getAllMedications() ([]Medication, error) {
 	var medications []Medication
 	for rows.Next() {
 		var m Medication
-		if err := rows.Scan(&m.ID, &m.Name, &m.Color); err != nil {
+		if err := rows.Scan(&m.ID, &m.Name, &m.Color, &m.ProfileID); err != nil {
 			log.Println("Erro ao escanear medicação:", err)
 			continue
 		}
@@ -1007,9 +1067,9 @@ func getAllMedications() ([]Medication, error) {
 	return medications, nil
 }
 
-// getAllFeverThresholds obtém todas as Fever Thresholds (Função Auxiliar)
-func getAllFeverThresholds() ([]FeverThreshold, error) {
-	rows, err := db.Query("SELECT id, label, min_temp, max_temp, color FROM fever_thresholds ORDER BY min_temp ASC")
+// getAllFeverThresholds obtém todas as Fever Thresholds para um profile_id (Função Auxiliar)
+func getAllFeverThresholds(profileID string) ([]FeverThreshold, error) {
+	rows, err := db.Query("SELECT id, label, min_temp, max_temp, color, profile_id FROM fever_thresholds WHERE profile_id=$1 ORDER BY min_temp ASC", profileID)
 	if err != nil {
 		return nil, err
 	}
@@ -1018,7 +1078,7 @@ func getAllFeverThresholds() ([]FeverThreshold, error) {
 	var thresholds []FeverThreshold
 	for rows.Next() {
 		var ft FeverThreshold
-		if err := rows.Scan(&ft.ID, &ft.Label, &ft.MinTemp, &ft.MaxTemp, &ft.Color); err != nil {
+		if err := rows.Scan(&ft.ID, &ft.Label, &ft.MinTemp, &ft.MaxTemp, &ft.Color, &ft.ProfileID); err != nil {
 			log.Println("Erro ao escanear Fever Threshold:", err)
 			continue
 		}

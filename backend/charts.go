@@ -53,7 +53,6 @@ func generateChart(dates []time.Time, temps []float64, medications []struct {
 			log.Printf("Erro ao parsear cor da Fever Threshold: %v", err)
 			continue
 		}
-
 		band := plotter.NewFunction(func(x float64) float64 {
 			return ft.MinTemp
 		})
@@ -91,7 +90,6 @@ func generateChart(dates []time.Time, temps []float64, medications []struct {
 	height := vg.Points(300)
 	canvas := vgimg.New(width, height)
 	dc := draw.New(canvas)
-
 	p.Draw(dc)
 
 	img := canvas.Image()

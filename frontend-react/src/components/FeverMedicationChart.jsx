@@ -48,15 +48,25 @@ function FeverMedicationChart({ startDate, endDate, diseaseID }) {
   const fetchData = async () => {
     setLoading(true);
     try {
+      // ADIÇÃO: ler profileId
+      const profileId = localStorage.getItem('currentProfileId');
+      if (!profileId) {
+        console.error('Nenhum profile selecionado.'); 
+        // Se quiseres não chamar a API, podes dar return aqui
+      }
+
       const params = {};
+      // ADIÇÃO: incluir profile_id
+      params.profile_id = profileId; // se não tiver, backend não filtra
       if (startDate) params.start = startDate;
       if (endDate) params.end = endDate;
       if (diseaseID) params.disease_id = diseaseID;
 
+      // Chama as 3 APIs com esse param
       const [recordsRes, medicationsRes, thresholdsRes] = await Promise.all([
-        api.getFeverMedication(params),
-        api.getMedications(),
-        api.getFeverThresholds(),
+        api.getFeverMedication(params),       // agora envia ?profile_id=XX&start=... 
+        api.getMedications(profileId),        // agora envia ?profile_id=XX
+        api.getFeverThresholds(profileId),    // agora envia ?profile_id=XX
       ]);
 
       const records = recordsRes.data;
@@ -109,16 +119,16 @@ function FeverMedicationChart({ startDate, endDate, diseaseID }) {
         borderColor: getMedicationColor(r.medication, medications),
         strokeDashArray: 4, // Linha tracejada
         strokeWidth: 2, // Linha mais fina
-        zIndex: 5, // Garantir que as anotações estejam abaixo da linha de temperatura
+        zIndex: 5,
         label: {
           borderColor: getMedicationColor(r.medication, medications),
           style: {
             color: '#fff',
-            background: getMedicationColor(r.medication, medications), // Cor com opacidade
+            background: getMedicationColor(r.medication, medications),
           },
           text: r.medication,
-          position: 'top', // Posicionar no topo para evitar sobreposição
-          offsetY: -10, // Ajustar o offset para afastar do ponto
+          position: 'top',
+          offsetY: -10,
         },
       }));
 
@@ -126,14 +136,14 @@ function FeverMedicationChart({ startDate, endDate, diseaseID }) {
     const febreAnnotations = thresholds.map((threshold) => ({
       y: threshold.min_temp,
       y2: threshold.max_temp,
-      fillColor: hexToRGBA(threshold.color, 1.0), // Cor com baixa opacidade
+      fillColor: hexToRGBA(threshold.color, 1.0),
       opacity: 0.1,
       borderWidth: 0,
     }));
 
     // Calcular os timestamps para min e max do eixo X
     const minTimestamp = new Date(startDate).setHours(0, 0, 0, 0);
-    const maxTimestamp = new Date(endDate).setHours(23, 59, 59, 999); // Final do dia de endDate
+    const maxTimestamp = new Date(endDate).setHours(23, 59, 59, 999);
 
     // Configuração das opções do gráfico
     setSeries(newSeries);
@@ -141,9 +151,7 @@ function FeverMedicationChart({ startDate, endDate, diseaseID }) {
       chart: {
         type: 'line',
         height: 400,
-        toolbar: {
-          show: true,
-        },
+        toolbar: { show: true },
       },
       annotations: {
         xaxis: medAnnotations,
@@ -153,7 +161,7 @@ function FeverMedicationChart({ startDate, endDate, diseaseID }) {
           fillColor: ft.fillColor,
           opacity: ft.opacity,
           borderWidth: ft.borderWidth,
-          zIndex: 0, // Garantir que as anotações de febre estejam atrás das linhas
+          zIndex: 0,
         })),
       },
       stroke: {
@@ -162,39 +170,27 @@ function FeverMedicationChart({ startDate, endDate, diseaseID }) {
       },
       xaxis: {
         type: 'datetime',
-        title: {
-          text: 'Data',
-        },
+        title: { text: 'Data' },
         min: minTimestamp,
-        max: maxTimestamp, // Agora inclui todo o dia de endDate
+        max: maxTimestamp,
       },
       yaxis: {
-        title: {
-          text: 'Temperatura (°C)',
-        },
+        title: { text: 'Temperatura (°C)' },
         min: 35,
         max: 42,
       },
       tooltip: {
         shared: true,
         intersect: false,
-        x: {
-          format: 'dd/MM/yyyy HH:mm',
-        },
+        x: { format: 'dd/MM/yyyy HH:mm' },
       },
-      markers: {
-        size: 5,
-      },
+      markers: { size: 5 },
       responsive: [
         {
           breakpoint: 600,
           options: {
-            chart: {
-              height: 300,
-            },
-            legend: {
-              position: 'bottom',
-            },
+            chart: { height: 300 },
+            legend: { position: 'bottom' },
           },
         },
       ],

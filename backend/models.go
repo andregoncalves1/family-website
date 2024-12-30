@@ -17,10 +17,7 @@ type CustomTime struct {
 // UnmarshalJSON implementa a interface json.Unmarshaler
 func (ct *CustomTime) UnmarshalJSON(b []byte) error {
 	s := strings.Trim(string(b), "\"")
-
-	// Define o layout esperado
 	layout := "2006-01-02T15:04"
-
 	t, err := time.Parse(layout, s)
 	if err != nil {
 		return fmt.Errorf("invalid date format: %s, expected format: %s", s, layout)
@@ -61,7 +58,7 @@ func (ct *CustomTime) Scan(value interface{}) error {
 	}
 }
 
-// User representa um utilizador
+// / User representa um utilizador
 type User struct {
 	ID       int    `json:"id"`
 	Username string `json:"username" binding:"required,min=3,max=50"`
@@ -69,12 +66,14 @@ type User struct {
 }
 
 // Profile representa um perfil de saúde
+// Agora possui user_id para vincular ao usuário.
 type Profile struct {
-	ID   int    `json:"id"`
-	Name string `json:"name" binding:"required,min=3,max=100"`
+	ID     int    `json:"id"`
+	Name   string `json:"name" binding:"required,min=3,max=100"`
+	UserID int    `json:"user_id"` // Novo campo, cada profile pertence a um user.
 }
 
-// FeverMedicationRecord representa um registro de febre e medicação
+// FeverMedicationRecord ...
 type FeverMedicationRecord struct {
 	ID          int        `json:"id"`
 	ProfileID   int        `json:"profile_id" binding:"required,gt=0"`
@@ -83,30 +82,34 @@ type FeverMedicationRecord struct {
 	DateTime    CustomTime `json:"date_time" binding:"required"`
 }
 
-// Disease representa uma doença
+// Disease ...
 type Disease struct {
 	ID        int        `json:"id"`
 	Name      string     `json:"name" binding:"required,min=3,max=100"`
 	StartDate time.Time  `json:"start_date" binding:"required"`
 	EndDate   *time.Time `json:"end_date" binding:"omitempty"`
+	ProfileID int        `json:"profile_id" binding:"required,gt=0"`
 }
 
-// Medication representa uma medicação
+// Medication ...
 type Medication struct {
-	ID    int    `json:"id"`
-	Name  string `json:"name" binding:"required,min=1,max=100"`
-	Color string `json:"color" binding:"required,hexcolor"`
+	ID        int    `json:"id"`
+	Name      string `json:"name" binding:"required,min=1,max=100"`
+	Color     string `json:"color" binding:"required,hexcolor"`
+	ProfileID int    `json:"profile_id" binding:"required,gt=0"`
 }
 
-// FeverThreshold representa uma faixa de febre
+// FeverThreshold ...
 type FeverThreshold struct {
-	ID      int     `json:"id"`
-	Label   string  `json:"label" binding:"required,min=1,max=50"`
-	MinTemp float64 `json:"min_temp" binding:"required,gte=0"`
-	MaxTemp float64 `json:"max_temp" binding:"required,gtfield=MinTemp"`
-	Color   string  `json:"color" binding:"required,hexcolor"`
+	ID        int     `json:"id"`
+	Label     string  `json:"label" binding:"required,min=1,max=50"`
+	MinTemp   float64 `json:"min_temp" binding:"required,gte=0"`
+	MaxTemp   float64 `json:"max_temp" binding:"required,gtfield=MinTemp"`
+	Color     string  `json:"color" binding:"required,hexcolor"`
+	ProfileID int     `json:"profile_id" binding:"required,gt=0"`
 }
 
+// FeverMedicationRecordWithDisease ...
 type FeverMedicationRecordWithDisease struct {
 	ID          int       `json:"id"`
 	ProfileID   int       `json:"profile_id"`
@@ -115,11 +118,4 @@ type FeverMedicationRecordWithDisease struct {
 	DateTime    time.Time `json:"date_time"`
 	DiseaseID   *int      `json:"disease_id,omitempty"`
 	DiseaseName *string   `json:"disease_name,omitempty"`
-}
-
-// FeverMedicationUpdateRequest representa a estrutura dos dados enviados para atualização
-type FeverMedicationUpdateRequest struct {
-	Temperature *float64   `json:"temperature" binding:"omitempty,gte=35,lte=42"`
-	Medication  *string    `json:"medication" binding:"omitempty,min=1,max=255"`
-	DateTime    *time.Time `json:"date_time" binding:"omitempty"`
 }

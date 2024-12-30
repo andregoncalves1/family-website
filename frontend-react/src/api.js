@@ -46,10 +46,13 @@ const apiService = {
   },
 
   // **Registros de Febre e Medicação**
+  // ADIÇÃO: Precisamos permitir "profile_id" em GET
   getFeverMedication(params) {
+    // params pode conter { profile_id, start, end, disease_id, medication, ... }
     return api.get('/fevermedications', { params });
   },
   addFeverMedication(record) {
+    // record deve incluir { profile_id, temperature, medication, date_time, ... }
     return api.post('/fevermedications', record);
   },
   updateFeverMedication(id, record) {
@@ -60,10 +63,16 @@ const apiService = {
   },
 
   // **Doenças**
-  getDiseases() {
+  // ADIÇÃO: getDiseases(profileId) -> GET /diseases?profile_id=...
+  getDiseases(profileId) {
+    if (profileId) {
+      return api.get('/diseases', { params: { profile_id: profileId } });
+    }
+    // se não vier profileId, chama a rota sem query param (mantendo compatibilidade)
     return api.get('/diseases');
   },
   addDisease(disease) {
+    // disease: { name, start_date, end_date, profile_id? }
     return api.post('/diseases', disease);
   },
   updateDisease(id, disease) {
@@ -74,10 +83,16 @@ const apiService = {
   },
 
   // **Medicações**
-  getMedications() {
+  // ADIÇÃO: getMedications(profileId) -> GET /medications?profile_id=...
+  getMedications(profileId) {
+    if (profileId) {
+      return api.get('/medications', { params: { profile_id: profileId } });
+    }
+    // se não vier profileId, chama sem param
     return api.get('/medications');
   },
   addMedication(medication) {
+    // medication: { name, color, profile_id? }
     return api.post('/medications', medication);
   },
   updateMedication(id, medication) {
@@ -88,10 +103,15 @@ const apiService = {
   },
 
   // **Limites de Febre**
-  getFeverThresholds() {
+  // ADIÇÃO: getFeverThresholds(profileId) -> GET /feverthresholds?profile_id=...
+  getFeverThresholds(profileId) {
+    if (profileId) {
+      return api.get('/feverthresholds', { params: { profile_id: profileId } });
+    }
     return api.get('/feverthresholds');
   },
   addFeverThreshold(threshold) {
+    // threshold: { label, min_temp, max_temp, color, profile_id? }
     return api.post('/feverthresholds', threshold);
   },
   updateFeverThreshold(id, threshold) {

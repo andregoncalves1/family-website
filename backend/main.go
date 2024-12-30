@@ -19,7 +19,8 @@ func main() {
 	dbName := getEnv("DB_NAME", "famhealth")
 
 	// String de conexão
-	connStr := "host=" + dbHost + " port=" + dbPort + " user=" + dbUser + " password=" + dbPassword + " dbname=" + dbName + " sslmode=disable"
+	connStr := "host=" + dbHost + " port=" + dbPort + " user=" + dbUser +
+		" password=" + dbPassword + " dbname=" + dbName + " sslmode=disable"
 	dbConn, err := sql.Open("postgres", connStr)
 	if err != nil {
 		log.Fatalf("Erro ao conectar à base de dados: %v", err)

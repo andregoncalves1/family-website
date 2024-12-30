@@ -1,3 +1,4 @@
+// utils.go
 package main
 
 import (
@@ -24,8 +25,6 @@ var (
 func initializeGlobals(secret []byte, dbConn *sql.DB) {
 	jwtSecret = secret
 	db = dbConn
-	// validate = validator.New()
-	// validate.RegisterValidation("hexcolor", validateHexColor)
 
 	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
 		v.RegisterValidation("hexcolor", validateHexColor)
@@ -54,19 +53,22 @@ func getEnv(key, defaultVal string) string {
 func validateHexColor(fl validator.FieldLevel) bool {
 	s := fl.Field().String()
 	if len(s) > 0 && s[0] == '#' {
-		s = s[1:] // Remove o prefixo '#'
+		s = s[1:]
 	}
 	if len(s) != 6 {
 		return false
 	}
 	for _, c := range s {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+		if !((c >= '0' && c <= '9') ||
+			(c >= 'a' && c <= 'f') ||
+			(c >= 'A' && c <= 'F')) {
 			return false
 		}
 	}
 	return true
 }
 
+// jwtAuthMiddleware lê o token e armazena o userID no contexto
 func jwtAuthMiddleware(c *gin.Context) {
 	authHeader := c.GetHeader("Authorization")
 	if authHeader == "" {
@@ -109,6 +111,8 @@ func jwtAuthMiddleware(c *gin.Context) {
 		c.Abort()
 		return
 	}
+
+	// Salva no contexto para usarmos nas rotas
 	c.Set("userID", int(userID))
 	c.Next()
 }
@@ -122,20 +126,24 @@ func createTables() {
             username VARCHAR(50) UNIQUE NOT NULL,
             password VARCHAR(255) NOT NULL
         );`,
+		// profiles agora possui user_id para vincular ao user.
 		`CREATE TABLE IF NOT EXISTS profiles (
             id SERIAL PRIMARY KEY,
-            name VARCHAR(100) NOT NULL
+            name VARCHAR(100) NOT NULL,
+            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE
         );`,
 		`CREATE TABLE IF NOT EXISTS diseases (
             id SERIAL PRIMARY KEY,
             name VARCHAR(100) NOT NULL,
             start_date TIMESTAMP NOT NULL,
-            end_date TIMESTAMP
+            end_date TIMESTAMP,
+            profile_id INTEGER REFERENCES profiles(id) ON DELETE CASCADE
         );`,
 		`CREATE TABLE IF NOT EXISTS medications (
             id SERIAL PRIMARY KEY,
             name VARCHAR(100) NOT NULL,
-            color VARCHAR(6) NOT NULL
+            color VARCHAR(6) NOT NULL,
+            profile_id INTEGER REFERENCES profiles(id) ON DELETE CASCADE
         );`,
 		`CREATE TABLE IF NOT EXISTS fever_thresholds (
             id SERIAL PRIMARY KEY,
@@ -143,6 +151,7 @@ func createTables() {
             min_temp FLOAT NOT NULL,
             max_temp FLOAT NOT NULL,
             color VARCHAR(6) NOT NULL,
+            profile_id INTEGER REFERENCES profiles(id) ON DELETE CASCADE,
             CHECK (min_temp < max_temp)
         );`,
 		`CREATE TABLE IF NOT EXISTS fever_medication_records (
@@ -151,7 +160,6 @@ func createTables() {
             temperature FLOAT,
             medication VARCHAR(100),
             date_time TIMESTAMP NOT NULL
-            -- Removida a coluna disease_id
         );`,
 	}
 
@@ -164,7 +172,7 @@ func createTables() {
 
 	log.Println("Tabelas criadas ou já existentes.")
 
-	// Remover a coluna disease_id se existir
+	// Se ainda existir a coluna disease_id, removemos
 	alterQuery := `ALTER TABLE fever_medication_records DROP COLUMN IF EXISTS disease_id;`
 	_, err := db.Exec(alterQuery)
 	if err != nil {
@@ -173,13 +181,11 @@ func createTables() {
 
 	log.Println("Coluna disease_id removida da tabela fever_medication_records (se existia).")
 
-	// Chama a função para criar o usuário admin se não existir
+	// Cria um usuário admin padrão, se não existir
 	createDefaultAdminUser()
 }
 
-// createDefaultAdminUser cria um usuário admin padrão se não existir
 func createDefaultAdminUser() {
-	// Verifica se o usuário admin já existe
 	var exists bool
 	err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE username=$1)", "admin").Scan(&exists)
 	if err != nil {
@@ -187,42 +193,24 @@ func createDefaultAdminUser() {
 	}
 
 	if !exists {
-		// Hash da senha
 		hashedPassword, err := hashPassword("123456")
 		if err != nil {
 			log.Fatalf("Erro ao hashear a senha do admin: %v", err)
 		}
-
-		// Inserir o usuário admin
 		_, err = db.Exec("INSERT INTO users (username, password) VALUES ($1, $2)", "admin", hashedPassword)
 		if err != nil {
 			log.Fatalf("Erro ao criar usuário admin: %v", err)
 		}
-
 		log.Println("Usuário admin criado com sucesso.")
 	} else {
 		log.Println("Usuário admin já existe.")
 	}
 }
 
-// GetTodayDate retorna a data atual no formato "YYYY-MM-DD".
+// Outras funções de ajuda (GetTodayDate, etc.) se quiseres
 func GetTodayDate() string {
 	today := time.Now()
 	year, month, day := today.Date()
-	return fmt.Sprintf("%04d-%02d-%02d", year, int(month), day)
-}
-
-// GetYesterdayDate retorna a data de ontem no formato "YYYY-MM-DD".
-func GetYesterdayDate() string {
-	yesterday := time.Now().AddDate(0, 0, -1)
-	year, month, day := yesterday.Date()
-	return fmt.Sprintf("%04d-%02d-%02d", year, int(month), day)
-}
-
-// GetThirtyDaysAgoDate retorna a data de 30 dias atrás no formato "YYYY-MM-DD".
-func GetThirtyDaysAgoDate() string {
-	pastDate := time.Now().AddDate(0, 0, -30)
-	year, month, day := pastDate.Date()
 	return fmt.Sprintf("%04d-%02d-%02d", year, int(month), day)
 }
 

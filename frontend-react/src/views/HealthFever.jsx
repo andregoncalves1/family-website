@@ -128,19 +128,18 @@ function HealthFever() {
           record !== undefined &&
           record !== null &&
           typeof record === 'object'
-      ) // Remove registros indefinidos, nulos ou não objetos
+      )
       .map((record) => ({
         ...record,
         id:
           record.id !== undefined && record.id !== null
             ? record.id
             : generateTempId(),
-        // Preencher campos opcionais com valores padrão
         date_time: record.date_time ? record.date_time : '',
         medication: record.medication ? record.medication : '',
         disease_name: record.disease_name ? record.disease_name : '',
         temperature:
-          Number.isFinite(record.temperature) ? record.temperature : null, // Uso de Number.isFinite
+          Number.isFinite(record.temperature) ? record.temperature : null,
         profile_id:
           record.profile_id !== undefined ? record.profile_id : null,
       }));
@@ -150,21 +149,24 @@ function HealthFever() {
   const fetchRecords = async () => {
     setLoading(true);
     try {
+      // ADIÇÃO: ler profileId
+      const profileId = localStorage.getItem('currentProfileId');
+
       const params = {};
+      if (profileId) {
+        params.profile_id = profileId; // enviar no GET
+      }
       if (filters.startDate) params.start = filters.startDate;
       if (filters.endDate) params.end = filters.endDate;
       if (filters.diseaseID) params.diseaseID = filters.diseaseID;
-      // diseaseID é usado apenas para filtrar, não para mapear diretamente nos registros
 
       const response = await api.getFeverMedication(params);
 
-      // Sanitizar os registros recebidos
       const sanitizedRecords = sanitizeRecords(response.data);
-      console.log('Registros Sanitizados:', sanitizedRecords); // Log para depuração
+      console.log('Registros Sanitizados:', sanitizedRecords);
 
-      // Filtrar registros indefinidos ou nulos
       const filteredRecords = sanitizedRecords.filter(
-        (record) => record !== null && record !== undefined
+        (r) => r !== null && r !== undefined
       );
       setRecords(filteredRecords);
     } catch (error) {
@@ -178,7 +180,9 @@ function HealthFever() {
   // Função para buscar doenças
   const fetchDiseases = async () => {
     try {
-      const response = await api.getDiseases();
+      // ADIÇÃO: ler profileId
+      const profileId = localStorage.getItem('currentProfileId');
+      const response = await api.getDiseases(profileId);
       setDiseases(response.data);
     } catch (error) {
       toast.error('Erro ao carregar doenças.');
@@ -189,7 +193,9 @@ function HealthFever() {
   // Função para buscar medicações
   const fetchMedications = async () => {
     try {
-      const response = await api.getMedications();
+      // ADIÇÃO: ler profileId
+      const profileId = localStorage.getItem('currentProfileId');
+      const response = await api.getMedications(profileId);
       setMedications(response.data);
     } catch (error) {
       toast.error('Erro ao carregar medicações.');
@@ -202,7 +208,6 @@ function HealthFever() {
     const { name, value } = e.target;
     if (name === 'diseaseID') {
       if (value === '') {
-        // Resetar para intervalo de datas padrão se nenhuma doença for selecionada
         setFilters({
           ...filters,
           diseaseID: '',
@@ -210,7 +215,6 @@ function HealthFever() {
           endDate: getCurrentDateTimeLocal().slice(0, 10),
         });
       } else {
-        // Encontrar as datas de início e fim da doença selecionada
         const selectedDisease = diseases.find((d) => d.id === value);
         if (selectedDisease) {
           const startDate = formatDate(selectedDisease.start_date);
@@ -230,28 +234,21 @@ function HealthFever() {
     }
   };
 
-  // Função para aplicar os filtros (Botão "Filtrar")
-  // Removida pois não é mais necessária
-  // const handleFilter = () => {
-  //   fetchRecords();
-  // };
-
-  // Função para formatar date_time no formato "YYYY-MM-DDTHH:MM"
   const formatDateTimeFunc = (dateTimeStr) => {
     return formatDateTime(dateTimeStr);
   };
 
-  // Handler para abrir o diálogo de adicionar registro e definir a data/hora atual
+  // Abrir diálogo de adicionar
   const openAddDialog = () => {
     setNewRecord({
       temperature: '',
       medication: '',
-      date_time: getCurrentDateTimeLocal(), // Define a data/hora atual
+      date_time: getCurrentDateTimeLocal(),
     });
     setAddDialogOpen(true);
   };
 
-  // Handler para adicionar um novo registro
+  // Adicionar registro
   const handleAddRecord = async () => {
     const profileId = localStorage.getItem('currentProfileId');
     if (!profileId) {
@@ -259,34 +256,33 @@ function HealthFever() {
       return;
     }
 
-    // Validação da Temperatura
-    if (newRecord.temperature === '') {
-      toast.error('A temperatura é obrigatória.');
-      return;
-    }
-    const tempValue = parseFloat(newRecord.temperature);
-    if (isNaN(tempValue) || tempValue < 30 || tempValue > 45) { // Ajuste os limites conforme necessário
-      toast.error('Insira uma temperatura válida.');
-      return;
+    // Se o user deixou "Temperatura" em branco, definimos 0
+    let tempValue = 0;
+    if (newRecord.temperature !== '') {
+        tempValue = parseFloat(newRecord.temperature);
+        if (isNaN(tempValue) || tempValue < 0 || tempValue > 45) {
+        toast.error('Insira uma temperatura válida (0 - 45).');
+        return;
+        }
     }
 
     setSaving(true);
     try {
       const payload = {
         profile_id: parseInt(profileId, 10),
-        temperature: tempValue, // Já garantimos que é um número válido ou 0
+        temperature: tempValue,
         medication: newRecord.medication || null,
         date_time: formatDateTimeFunc(newRecord.date_time),
       };
 
       await api.addFeverMedication(payload);
       toast.success('Registro adicionado com sucesso!');
-      // fetchRecords(); // Removido para evitar chamada duplicada
+      // Não chamamos fetchRecords() aqui para evitar duplic. (Como no teu código)
       setAddDialogOpen(false);
       setNewRecord({
         temperature: '',
         medication: '',
-        date_time: getCurrentDateTimeLocal(), // Resetar para data/hora atual
+        date_time: getCurrentDateTimeLocal(),
       });
     } catch (error) {
       const errorMsg =
@@ -298,12 +294,11 @@ function HealthFever() {
     }
   };
 
-  // Função para formatar os timestamps para "YYYY-MM-DD"
   const formatTimestampToDate = (timestamp) => {
     return formatDate(timestamp);
   };
 
-  // Manipulador do Slider
+  // Slider
   const handleSliderChange = (event, newValue) => {
     setDateRange(newValue);
     const newStartDate = formatTimestampToDate(newValue[0]);
@@ -312,11 +307,11 @@ function HealthFever() {
       ...filters,
       startDate: newStartDate,
       endDate: newEndDate,
-      diseaseID: '', // Resetar filtro de doença quando o slider muda
+      diseaseID: '',
     });
   };
 
-  // Handlers para Edição
+  // Editar
   const handleEdit = (record) => {
     setRecordToEdit({
       ...record,
@@ -331,26 +326,23 @@ function HealthFever() {
   };
 
   const saveEdit = async () => {
-    // Validação da Temperatura
-    if (recordToEdit.temperature === '') {
-      toast.error('A temperatura é obrigatória.');
-      return;
-    }
-    const tempValue = parseFloat(recordToEdit.temperature);
-    if (isNaN(tempValue) || tempValue < 30 || tempValue > 45) { // Ajuste os limites conforme necessário
-      toast.error('Insira uma temperatura válida.');
-      return;
+    let tempValue = 0;
+    if (recordToEdit.temperature !== '') {
+        tempValue = parseFloat(recordToEdit.temperature);
+        if (isNaN(tempValue) || tempValue < 0 || tempValue > 45) {
+        toast.error('Insira uma temperatura válida (0 - 45).');
+        return;
+        }
     }
 
     try {
       const payload = {
-        temperature: tempValue, // Já garantimos que é um número válido ou 0
+        temperature: tempValue,
         medication: recordToEdit.medication || null,
-        date_time: formatDateTime(recordToEdit.date_time), // Garantir o formato correto
+        date_time: formatDateTime(recordToEdit.date_time),
       };
       await api.updateFeverMedication(recordToEdit.id, payload);
       toast.success('Registro atualizado com sucesso!');
-      // fetchRecords(); // Removido para evitar chamada duplicada
       setRecordToEdit(null);
       setEditDialogOpen(false);
     } catch (error) {
@@ -361,7 +353,7 @@ function HealthFever() {
     }
   };
 
-  // Handlers para Exclusão
+  // Excluir
   const handleDelete = (record) => {
     setRecordToDelete(record);
     setDeleteDialogOpen(true);
@@ -376,7 +368,6 @@ function HealthFever() {
     try {
       await api.deleteFeverMedication(recordToDelete.id);
       toast.success('Registro apagado com sucesso!');
-      // fetchRecords(); // Removido para evitar chamada duplicada
       setDeleteDialogOpen(false);
       setRecordToDelete(null);
     } catch (error) {
@@ -387,20 +378,19 @@ function HealthFever() {
     }
   };
 
-  // useEffect para buscar doenças e medicações inicialmente
+  // Buscar doenças e medicações no init
   useEffect(() => {
     fetchDiseases();
     fetchMedications();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // useEffect para buscar registros sempre que os filtros mudarem
+  // Buscar registros sempre que filters mudarem
   useEffect(() => {
     fetchRecords();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 
-  // Definição das colunas da tabela
   const columns = [
     {
       field: 'date_time',
@@ -421,12 +411,12 @@ function HealthFever() {
       headerName: 'Temperatura (°C)',
       flex: 1,
       valueFormatter: (params) => {
-        console.log('Temperature raw value:', params.value); // Para depuração
-        const temp = Number(params.value);
+        console.log('Temperature raw value:', params);
+        const temp = Number(params);
 
-        if (temp === 0 || temp === null || temp === undefined) return ''; // Exibir string vazia para 0, null ou undefined
-        if (Number.isFinite(temp) && temp > 0) return temp.toFixed(1); // Exibir valor com uma casa decimal
-        return ''; // Exibir string vazia para valores inválidos ou ausentes
+        if (temp === 0 || temp === null || temp === undefined) return '';
+        if (Number.isFinite(temp) && temp > 0) return temp.toFixed(1);
+        return '';
       },
     },
     {
@@ -527,7 +517,6 @@ function HealthFever() {
           </FormControl>
         </Grid>
         <Grid item xs={12}>
-          {/* Removido o botão "Filtrar" */}
           <Button
             variant="outlined"
             color="secondary"
