@@ -1,11 +1,12 @@
 // frontend-react/src/api.js
 import axios from 'axios';
 
+// Crie uma instância do axios com a URL base da sua API
 const api = axios.create({
-  baseURL: 'http://localhost:18080/api', // Update if backend is hosted elsewhere
+  baseURL: 'http://localhost:18080/api', // Atualize se o backend estiver hospedado em outro lugar
 });
 
-// Interceptor to add the token to every request if available
+// Interceptor para adicionar o token a cada requisição, se disponível
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
@@ -17,8 +18,9 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// Objeto de serviços da API
 const apiService = {
-  // Authentication
+  // **Autenticação**
   login(username, password) {
     return api.post('/login', { username, password });
   },
@@ -26,31 +28,38 @@ const apiService = {
     return api.post('/users', user);
   },
 
-  // Profiles
+  // **Perfis**
   getProfiles() {
     return api.get('/profiles');
+  },
+  getProfile(id) {
+    return api.get(`/profiles/${id}`); // Endpoint para buscar um perfil específico
   },
   createProfile(profile) {
     return api.post('/profiles', profile);
   },
+  updateProfile(id, profile) {
+    return api.put(`/profiles/${id}`, profile);
+  },
+  deleteProfile(id) {
+    return api.delete(`/profiles/${id}`);
+  },
 
-  // Fever Medication Records
+  // **Registros de Febre e Medicação**
   getFeverMedication(params) {
     return api.get('/fevermedications', { params });
   },
   addFeverMedication(record) {
     return api.post('/fevermedications', record);
   },
-
   updateFeverMedication(id, record) {
     return api.put(`/fevermedications/${id}`, record);
   },
-
   deleteFeverMedication(id) {
     return api.delete(`/fevermedications/${id}`);
   },
 
-  // Diseases
+  // **Doenças**
   getDiseases() {
     return api.get('/diseases');
   },
@@ -64,7 +73,7 @@ const apiService = {
     return api.delete(`/diseases/${id}`);
   },
 
-  // Medications
+  // **Medicações**
   getMedications() {
     return api.get('/medications');
   },
@@ -78,7 +87,7 @@ const apiService = {
     return api.delete(`/medications/${id}`);
   },
 
-  // Fever Thresholds
+  // **Limites de Febre**
   getFeverThresholds() {
     return api.get('/feverthresholds');
   },
@@ -92,7 +101,7 @@ const apiService = {
     return api.delete(`/feverthresholds/${id}`);
   },
 
-  // Reports
+  // **Relatórios**
   generateReportPDF(params) {
     return api.get('/reports/pdf', { params, responseType: 'blob' });
   },
