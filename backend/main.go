@@ -85,8 +85,8 @@ func main() {
 		// Registros de Febre e Medicação
 		authorized.GET("/fevermedications", getFeverMedication)
 		authorized.POST("/fevermedications", addFeverMedication)
-		authorized.PUT("/fevermedications/:id", updateFeverMedication)    // Nova rota para atualização
-		authorized.DELETE("/fevermedications/:id", deleteFeverMedication) // Nova rota para exclusão
+		authorized.PUT("/fevermedications/:id", updateFeverMedication)
+		authorized.DELETE("/fevermedications/:id", deleteFeverMedication)
 
 		// Relatórios
 		authorized.GET("/reports/pdf", generateReportPDF)

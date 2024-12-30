@@ -1,4 +1,4 @@
-// frontend-react/src/views/HealthFever.jsx
+// src/views/HealthFever.jsx
 import React, { useEffect, useState } from 'react';
 import {
   Container,
@@ -28,37 +28,56 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 
 // Funções auxiliares para obter datas
-const getTodayDate = () => {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, '0');
-  const day = String(today.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+const getCurrentDateTimeLocal = () => {
+  const now = new Date();
+  const pad = (num) => String(num).padStart(2, '0');
+  const year = now.getFullYear();
+  const month = pad(now.getMonth() + 1);
+  const day = pad(now.getDate());
+  const hours = pad(now.getHours());
+  const minutes = pad(now.getMinutes());
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
 };
 
 const getYesterdayDate = () => {
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
+  const pad = (num) => String(num).padStart(2, '0');
   const year = yesterday.getFullYear();
-  const month = String(yesterday.getMonth() + 1).padStart(2, '0');
-  const day = String(yesterday.getDate()).padStart(2, '0');
+  const month = pad(yesterday.getMonth() + 1);
+  const day = pad(yesterday.getDate());
   return `${year}-${month}-${day}`;
 };
 
 const getThirtyDaysAgoDate = () => {
   const pastDate = new Date();
   pastDate.setDate(pastDate.getDate() - 30);
+  const pad = (num) => String(num).padStart(2, '0');
   const year = pastDate.getFullYear();
-  const month = String(pastDate.getMonth() + 1).padStart(2, '0');
-  const day = String(pastDate.getDate()).padStart(2, '0');
+  const month = pad(pastDate.getMonth() + 1);
+  const day = pad(pastDate.getDate());
   return `${year}-${month}-${day}`;
+};
+
+const formatDateTimeLocal = (dateTimeStr) => {
+  if (!dateTimeStr) {
+    return getCurrentDateTimeLocal(); // Fallback para data/hora atual
+  }
+  const date = new Date(dateTimeStr);
+  const pad = (num) => String(num).padStart(2, '0');
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
 };
 
 function HealthFever() {
   // Estado para os filtros
   const [filters, setFilters] = useState({
     startDate: getYesterdayDate(),
-    endDate: getTodayDate(),
+    endDate: getCurrentDateTimeLocal().slice(0, 10), // Apenas a data
     diseaseID: '',
   });
 
@@ -71,7 +90,7 @@ function HealthFever() {
   // Estado para o Slider
   const [dateRange, setDateRange] = useState([
     new Date(getYesterdayDate()).getTime(),
-    new Date(getTodayDate()).getTime(),
+    new Date(getCurrentDateTimeLocal()).getTime(),
   ]);
 
   // Estados para Diálogos de Edição e Exclusão
@@ -86,8 +105,7 @@ function HealthFever() {
   const [newRecord, setNewRecord] = useState({
     temperature: '',
     medication: '',
-    date_time: '',
-    disease_id: '',
+    date_time: getCurrentDateTimeLocal(), // Data/Hora atual
   });
   const [saving, setSaving] = useState(false);
 
@@ -110,7 +128,6 @@ function HealthFever() {
         medication: record.medication ? record.medication : '',
         disease_name: record.disease_name ? record.disease_name : '',
         temperature: record.temperature !== undefined ? record.temperature : null,
-        disease_id: record.disease_id !== undefined ? record.disease_id : null,
         profile_id: record.profile_id !== undefined ? record.profile_id : null,
       }));
   };
@@ -122,7 +139,8 @@ function HealthFever() {
       const params = {};
       if (filters.startDate) params.start = filters.startDate;
       if (filters.endDate) params.end = filters.endDate;
-      if (filters.diseaseID) params.disease_id = filters.diseaseID;
+      if (filters.diseaseID) params.diseaseID = filters.diseaseID;
+      // diseaseID é usado apenas para filtrar, não para mapear diretamente nos registros
 
       const response = await api.getFeverMedication(params);
 
@@ -165,10 +183,36 @@ function HealthFever() {
 
   // Handler para mudança nos filtros
   const handleFilterChange = (e) => {
-    setFilters({ ...filters, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    if (name === 'diseaseID') {
+      if (value === '') {
+        // Resetar para intervalo de datas padrão se nenhuma doença for selecionada
+        setFilters({
+          ...filters,
+          diseaseID: '',
+          startDate: getYesterdayDate(),
+          endDate: getCurrentDateTimeLocal().slice(0, 10),
+        });
+      } else {
+        // Encontrar as datas de início e fim da doença selecionada
+        const selectedDisease = diseases.find(d => d.id === value);
+        if (selectedDisease) {
+          const startDate = FormatDate(selectedDisease.start_date);
+          const endDate = selectedDisease.end_date ? FormatDate(selectedDisease.end_date) : getCurrentDateTimeLocal().slice(0, 10);
+          setFilters({
+            ...filters,
+            diseaseID: value,
+            startDate: startDate,
+            endDate: endDate,
+          });
+        }
+      }
+    } else {
+      setFilters({ ...filters, [name]: value });
+    }
   };
 
-  // Handler para aplicar os filtros
+  // Função para aplicar os filtros
   const handleFilter = () => {
     fetchRecords();
   };
@@ -176,16 +220,19 @@ function HealthFever() {
   // Função para formatar date_time no formato "YYYY-MM-DDTHH:MM"
   const formatDateTime = (dateTimeStr) => {
     if (!dateTimeStr) {
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const day = String(now.getDate()).padStart(2, '0');
-      const hours = String(now.getHours()).padStart(2, '0');
-      const minutes = String(now.getMinutes()).padStart(2, '0');
-      return `${year}-${month}-${day}T${hours}:${minutes}`;
+      return getCurrentDateTimeLocal(); // Fallback para data/hora atual
     }
-    // Extrair a parte "YYYY-MM-DDTHH:MM" do valor recebido (pode ser "YYYY-MM-DDTHH:MM:SSZ")
-    return dateTimeStr.slice(0, 16);
+    return dateTimeStr.slice(0, 16); // "YYYY-MM-DDTHH:MM"
+  };
+
+  // Handler para abrir o diálogo de adicionar registro e definir a data/hora atual
+  const openAddDialog = () => {
+    setNewRecord({
+      temperature: '',
+      medication: '',
+      date_time: getCurrentDateTimeLocal(), // Define a data/hora atual
+    });
+    setAddDialogOpen(true);
   };
 
   // Handler para adicionar um novo registro
@@ -205,9 +252,6 @@ function HealthFever() {
           : null,
         medication: newRecord.medication || null,
         date_time: formatDateTime(newRecord.date_time),
-        disease_id: newRecord.disease_id
-          ? parseInt(newRecord.disease_id)
-          : null,
       };
 
       await api.addFeverMedication(payload);
@@ -217,8 +261,7 @@ function HealthFever() {
       setNewRecord({
         temperature: '',
         medication: '',
-        date_time: '',
-        disease_id: '',
+        date_time: getCurrentDateTimeLocal(), // Resetar para data/hora atual
       });
     } catch (error) {
       const errorMsg =
@@ -233,9 +276,10 @@ function HealthFever() {
   // Função para formatar os timestamps para "YYYY-MM-DD"
   const formatTimestampToDate = (timestamp) => {
     const date = new Date(timestamp);
+    const pad = (num) => String(num).padStart(2, '0');
     const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
+    const month = pad(date.getMonth() + 1);
+    const day = pad(date.getDate());
     return `${year}-${month}-${day}`;
   };
 
@@ -248,12 +292,26 @@ function HealthFever() {
       ...filters,
       startDate: newStartDate,
       endDate: newEndDate,
+      diseaseID: '', // Resetar filtro de doença quando o slider muda
     });
+  };
+
+  // Função para formatar uma data para "YYYY-MM-DD"
+  const formatDate = (date) => {
+    const d = new Date(date);
+    const pad = (num) => String(num).padStart(2, '0');
+    const year = d.getFullYear();
+    const month = pad(d.getMonth() + 1);
+    const day = pad(d.getDate());
+    return `${year}-${month}-${day}`;
   };
 
   // Handlers para Edição
   const handleEdit = (record) => {
-    setRecordToEdit(record);
+    setRecordToEdit({
+      ...record,
+      date_time: formatDateTime(record.date_time),
+    });
     setEditDialogOpen(true);
   };
 
@@ -267,8 +325,7 @@ function HealthFever() {
       const payload = {
         temperature: recordToEdit.temperature !== '' ? parseFloat(recordToEdit.temperature) : null,
         medication: recordToEdit.medication || null,
-        date_time: recordToEdit.date_time, // Assumindo que já está no formato correto
-        disease_id: recordToEdit.disease_id !== '' ? parseInt(recordToEdit.disease_id) : null,
+        date_time: formatDateTime(recordToEdit.date_time), // Garantir o formato correto
       };
       await api.updateFeverMedication(recordToEdit.id, payload);
       toast.success('Registro atualizado com sucesso!');
@@ -404,6 +461,7 @@ function HealthFever() {
               shrink: true,
             }}
             fullWidth
+            disabled={filters.diseaseID !== ''}
           />
         </Grid>
         <Grid item xs={12} sm={4}>
@@ -417,6 +475,7 @@ function HealthFever() {
               shrink: true,
             }}
             fullWidth
+            disabled={filters.diseaseID !== ''}
           />
         </Grid>
         <Grid item xs={12} sm={4}>
@@ -429,7 +488,7 @@ function HealthFever() {
               onChange={handleFilterChange}
             >
               <MenuItem value="">
-                <em>Todas</em>
+                <em>Nenhuma</em>
               </MenuItem>
               {diseases.map((disease) => (
                 <MenuItem key={disease.id} value={disease.id}>
@@ -446,7 +505,7 @@ function HealthFever() {
           <Button
             variant="outlined"
             color="secondary"
-            onClick={() => setAddDialogOpen(true)}
+            onClick={openAddDialog}
             sx={{ ml: 2 }}
           >
             Adicionar Registo
@@ -465,11 +524,11 @@ function HealthFever() {
           valueLabelDisplay="auto"
           valueLabelFormat={(value) => formatTimestampToDate(value)}
           min={new Date(getThirtyDaysAgoDate()).getTime()}
-          max={new Date(getTodayDate()).getTime()}
+          max={new Date(getCurrentDateTimeLocal()).getTime()}
           marks={[
             { value: new Date(getThirtyDaysAgoDate()).getTime(), label: '30 dias atrás' },
             { value: new Date(getYesterdayDate()).getTime(), label: 'Ontem' },
-            { value: new Date(getTodayDate()).getTime(), label: 'Hoje' },
+            { value: new Date(getCurrentDateTimeLocal()).getTime(), label: 'Hoje' },
           ]}
           sx={{ width: '100%' }}
         />
@@ -507,7 +566,12 @@ function HealthFever() {
       </Box>
 
       {/* Diálogo para Adicionar Registro */}
-      <Dialog open={addDialogOpen} onClose={() => setAddDialogOpen(false)} fullWidth maxWidth="sm">
+      <Dialog
+        open={addDialogOpen}
+        onClose={() => setAddDialogOpen(false)}
+        fullWidth
+        maxWidth="sm"
+      >
         <DialogTitle>Adicionar Registo</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -558,27 +622,6 @@ function HealthFever() {
                 }
               />
             </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel>Doença</InputLabel>
-                <Select
-                  value={newRecord.disease_id}
-                  label="Doença"
-                  onChange={(e) =>
-                    setNewRecord({ ...newRecord, disease_id: e.target.value })
-                  }
-                >
-                  <MenuItem value="">
-                    <em>Nenhuma</em>
-                  </MenuItem>
-                  {diseases.map((disease) => (
-                    <MenuItem key={disease.id} value={disease.id}>
-                      {disease.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
           </Grid>
         </DialogContent>
         <DialogActions>
@@ -597,7 +640,12 @@ function HealthFever() {
       </Dialog>
 
       {/* Diálogo para Editar Registro */}
-      <Dialog open={editDialogOpen} onClose={handleEditDialogClose} fullWidth maxWidth="sm">
+      <Dialog
+        open={editDialogOpen}
+        onClose={handleEditDialogClose}
+        fullWidth
+        maxWidth="sm"
+      >
         <DialogTitle>Editar Registro</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -609,7 +657,10 @@ function HealthFever() {
                 fullWidth
                 value={recordToEdit?.temperature || ''}
                 onChange={(e) =>
-                  setRecordToEdit({ ...recordToEdit, temperature: e.target.value })
+                  setRecordToEdit({
+                    ...recordToEdit,
+                    temperature: e.target.value,
+                  })
                 }
               />
             </Grid>
@@ -620,7 +671,10 @@ function HealthFever() {
                   value={recordToEdit?.medication || ''}
                   label="Medicação"
                   onChange={(e) =>
-                    setRecordToEdit({ ...recordToEdit, medication: e.target.value })
+                    setRecordToEdit({
+                      ...recordToEdit,
+                      medication: e.target.value,
+                    })
                   }
                 >
                   <MenuItem value="">
@@ -642,32 +696,18 @@ function HealthFever() {
                 InputLabelProps={{
                   shrink: true,
                 }}
-                value={recordToEdit?.date_time ? recordToEdit.date_time.slice(0,16) : ''}
+                value={
+                  recordToEdit?.date_time
+                    ? recordToEdit.date_time
+                    : getCurrentDateTimeLocal()
+                }
                 onChange={(e) =>
-                  setRecordToEdit({ ...recordToEdit, date_time: e.target.value })
+                  setRecordToEdit({
+                    ...recordToEdit,
+                    date_time: e.target.value,
+                  })
                 }
               />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel>Doença</InputLabel>
-                <Select
-                  value={recordToEdit?.disease_id || ''}
-                  label="Doença"
-                  onChange={(e) =>
-                    setRecordToEdit({ ...recordToEdit, disease_id: e.target.value })
-                  }
-                >
-                  <MenuItem value="">
-                    <em>Nenhuma</em>
-                  </MenuItem>
-                  {diseases.map((disease) => (
-                    <MenuItem key={disease.id} value={disease.id}>
-                      {disease.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
             </Grid>
           </Grid>
         </DialogContent>
@@ -699,10 +739,18 @@ function HealthFever() {
           </Typography>
           {recordToDelete && (
             <Box sx={{ mt: 2 }}>
-              <Typography><strong>Temperatura:</strong> {recordToDelete.temperature}°C</Typography>
-              <Typography><strong>Medicação:</strong> {recordToDelete.medication || 'Nenhuma'}</Typography>
-              <Typography><strong>Data/Hora:</strong> {new Date(recordToDelete.date_time).toLocaleString()}</Typography>
-              <Typography><strong>Doença:</strong> {recordToDelete.disease_name || 'Nenhuma'}</Typography>
+              <Typography>
+                <strong>Temperatura:</strong> {recordToDelete.temperature}°C
+              </Typography>
+              <Typography>
+                <strong>Medicação:</strong> {recordToDelete.medication || 'Nenhuma'}
+              </Typography>
+              <Typography>
+                <strong>Data/Hora:</strong> {new Date(recordToDelete.date_time).toLocaleString()}
+              </Typography>
+              <Typography>
+                <strong>Doença:</strong> {recordToDelete.disease_name || 'Nenhuma'}
+              </Typography>
             </Box>
           )}
         </DialogContent>

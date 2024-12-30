@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
@@ -149,8 +150,8 @@ func createTables() {
             profile_id INTEGER REFERENCES profiles(id) ON DELETE CASCADE,
             temperature FLOAT,
             medication VARCHAR(100),
-            date_time TIMESTAMP NOT NULL,
-            disease_id INTEGER REFERENCES diseases(id) ON DELETE SET NULL
+            date_time TIMESTAMP NOT NULL
+            -- Removida a coluna disease_id
         );`,
 	}
 
@@ -162,4 +163,71 @@ func createTables() {
 	}
 
 	log.Println("Tabelas criadas ou já existentes.")
+
+	// Remover a coluna disease_id se existir
+	alterQuery := `ALTER TABLE fever_medication_records DROP COLUMN IF EXISTS disease_id;`
+	_, err := db.Exec(alterQuery)
+	if err != nil {
+		log.Fatalf("Erro ao remover coluna disease_id: %v", err)
+	}
+
+	log.Println("Coluna disease_id removida da tabela fever_medication_records (se existia).")
+
+	// Chama a função para criar o usuário admin se não existir
+	createDefaultAdminUser()
+}
+
+// createDefaultAdminUser cria um usuário admin padrão se não existir
+func createDefaultAdminUser() {
+	// Verifica se o usuário admin já existe
+	var exists bool
+	err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE username=$1)", "admin").Scan(&exists)
+	if err != nil {
+		log.Fatalf("Erro ao verificar existência do usuário admin: %v", err)
+	}
+
+	if !exists {
+		// Hash da senha
+		hashedPassword, err := hashPassword("123456")
+		if err != nil {
+			log.Fatalf("Erro ao hashear a senha do admin: %v", err)
+		}
+
+		// Inserir o usuário admin
+		_, err = db.Exec("INSERT INTO users (username, password) VALUES ($1, $2)", "admin", hashedPassword)
+		if err != nil {
+			log.Fatalf("Erro ao criar usuário admin: %v", err)
+		}
+
+		log.Println("Usuário admin criado com sucesso.")
+	} else {
+		log.Println("Usuário admin já existe.")
+	}
+}
+
+// GetTodayDate retorna a data atual no formato "YYYY-MM-DD".
+func GetTodayDate() string {
+	today := time.Now()
+	year, month, day := today.Date()
+	return fmt.Sprintf("%04d-%02d-%02d", year, int(month), day)
+}
+
+// GetYesterdayDate retorna a data de ontem no formato "YYYY-MM-DD".
+func GetYesterdayDate() string {
+	yesterday := time.Now().AddDate(0, 0, -1)
+	year, month, day := yesterday.Date()
+	return fmt.Sprintf("%04d-%02d-%02d", year, int(month), day)
+}
+
+// GetThirtyDaysAgoDate retorna a data de 30 dias atrás no formato "YYYY-MM-DD".
+func GetThirtyDaysAgoDate() string {
+	pastDate := time.Now().AddDate(0, 0, -30)
+	year, month, day := pastDate.Date()
+	return fmt.Sprintf("%04d-%02d-%02d", year, int(month), day)
+}
+
+// FormatDate formata uma data para "YYYY-MM-DD".
+func FormatDate(date time.Time) string {
+	year, month, day := date.Date()
+	return fmt.Sprintf("%04d-%02d-%02d", year, int(month), day)
 }

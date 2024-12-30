@@ -81,8 +81,6 @@ type FeverMedicationRecord struct {
 	Temperature float64    `json:"temperature" binding:"omitempty,gte=35,lte=42"`
 	Medication  string     `json:"medication" binding:"omitempty,min=1,max=255"`
 	DateTime    CustomTime `json:"date_time" binding:"required"`
-	DiseaseID   *int       `json:"disease_id" binding:"omitempty,gt=0"`
-	DiseaseName *string    `json:"disease_name"`
 }
 
 // Disease representa uma doença
@@ -109,9 +107,19 @@ type FeverThreshold struct {
 	Color   string  `json:"color" binding:"required,hexcolor"`
 }
 
+type FeverMedicationRecordWithDisease struct {
+	ID          int       `json:"id"`
+	ProfileID   int       `json:"profile_id"`
+	Temperature float64   `json:"temperature"`
+	Medication  string    `json:"medication"`
+	DateTime    time.Time `json:"date_time"`
+	DiseaseID   *int      `json:"disease_id,omitempty"`
+	DiseaseName *string   `json:"disease_name,omitempty"`
+}
+
+// FeverMedicationUpdateRequest representa a estrutura dos dados enviados para atualização
 type FeverMedicationUpdateRequest struct {
 	Temperature *float64   `json:"temperature" binding:"omitempty,gte=35,lte=42"`
 	Medication  *string    `json:"medication" binding:"omitempty,min=1,max=255"`
 	DateTime    *time.Time `json:"date_time" binding:"omitempty"`
-	DiseaseID   *int       `json:"disease_id" binding:"omitempty,gt=0"`
 }
