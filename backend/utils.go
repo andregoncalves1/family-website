@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
 	"github.com/golang-jwt/jwt/v4"
 	"golang.org/x/crypto/bcrypt"
@@ -16,15 +17,20 @@ import (
 
 var (
 	jwtSecret []byte
-	validate  *validator.Validate
 	db        *sql.DB
 )
 
 func initializeGlobals(secret []byte, dbConn *sql.DB) {
 	jwtSecret = secret
 	db = dbConn
-	validate = validator.New()
-	validate.RegisterValidation("hexcolor", validateHexColor)
+	// validate = validator.New()
+	// validate.RegisterValidation("hexcolor", validateHexColor)
+
+	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
+		v.RegisterValidation("hexcolor", validateHexColor)
+	} else {
+		log.Fatal("Falha ao registrar a validação personalizada 'hexcolor'")
+	}
 }
 
 func hashPassword(password string) (string, error) {

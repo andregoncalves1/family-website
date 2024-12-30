@@ -1,3 +1,4 @@
+// main.go
 package main
 
 import (
@@ -41,7 +42,7 @@ func main() {
 
 	// Configuração do CORS
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:8081"}, // URL do frontend
+		AllowOrigins:     []string{"http://localhost:3000"}, // URL do frontend
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Authorization", "Content-Type"},
 		ExposeHeaders:    []string{"Content-Length"},
@@ -84,6 +85,8 @@ func main() {
 		// Registros de Febre e Medicação
 		authorized.GET("/fevermedications", getFeverMedication)
 		authorized.POST("/fevermedications", addFeverMedication)
+		authorized.PUT("/fevermedications/:id", updateFeverMedication)    // Nova rota para atualização
+		authorized.DELETE("/fevermedications/:id", deleteFeverMedication) // Nova rota para exclusão
 
 		// Relatórios
 		authorized.GET("/reports/pdf", generateReportPDF)

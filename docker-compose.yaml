@@ -45,5 +45,17 @@ services:
       - "80:80"
     restart: unless-stopped
 
+      # Frontend React
+  react_frontend:
+    build:
+      context: ./frontend-react
+      dockerfile: Dockerfile
+    container_name: react_frontend
+    depends_on:
+      - go_backend
+    ports:
+      - "3000:80" # Map port 3000 on host to port 80 on container
+    restart: unless-stopped
+
 volumes:
   db_data:

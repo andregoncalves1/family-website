@@ -33,13 +33,13 @@ const router = createRouter({
 })
 
 // Proteção de rotas
-/*router.beforeEach((to, from, next) => {
+router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('token')
   if (to.path !== '/login' && !token) {
     next('/login')
   } else {
     next()
   }
-})*/
+})
 
 export default router

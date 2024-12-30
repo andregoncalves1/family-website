@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -262,16 +263,32 @@ func getFeverMedication(c *gin.Context) {
 	args := []interface{}{}
 	count := 1
 
+	// Adiciona filtro de data de início, se fornecido
 	if start != "" {
 		query += fmt.Sprintf(" AND f.date_time >= $%d", count)
 		args = append(args, start)
 		count++
 	}
+
+	// Adiciona filtro de data de fim, se fornecido
 	if end != "" {
+		// Parse da data de fim
+		parsedEnd, err := time.Parse("2006-01-02", end)
+		if err != nil {
+			log.Printf("Erro ao parsear end date: %v", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Formato de data inválido para 'end'"})
+			return
+		}
+		// Define o horário como 23:59:59.999 para incluir todo o dia
+		parsedEnd = parsedEnd.Add(23*time.Hour + 59*time.Minute + 59*time.Second + 999*time.Millisecond)
+		// Formata a data para o formato esperado pelo banco de dados
+		endFormatted := parsedEnd.Format("2006-01-02 15:04:05") // Ajuste conforme necessário
 		query += fmt.Sprintf(" AND f.date_time <= $%d", count)
-		args = append(args, end)
+		args = append(args, endFormatted)
 		count++
 	}
+
+	// Adiciona filtro de disease_id, se fornecido
 	if diseaseID != "" {
 		query += fmt.Sprintf(" AND f.disease_id = $%d", count)
 		args = append(args, diseaseID)
@@ -296,6 +313,11 @@ func getFeverMedication(c *gin.Context) {
 			continue
 		}
 		records = append(records, r)
+	}
+
+	// Retornar uma lista vazia se não houver registros
+	if len(records) == 0 {
+		records = []FeverMedicationRecordWithDisease{}
 	}
 
 	c.JSON(http.StatusOK, records)
@@ -361,6 +383,162 @@ func addFeverMedication(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Registro adicionado com sucesso"})
 }
 
+// updateFeverMedication atualiza um registro existente de febre e medicação
+func updateFeverMedication(c *gin.Context) {
+	// Obter o ID do registro a partir dos parâmetros da URL
+	idParam := c.Param("id")
+	if idParam == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID do registro é obrigatório"})
+		return
+	}
+
+	// Converter o ID para inteiro
+	id, err := strconv.Atoi(idParam)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID do registro inválido"})
+		return
+	}
+
+	// Bind dos dados recebidos para a estrutura de atualização
+	var updateReq FeverMedicationUpdateRequest
+	if err := c.ShouldBindJSON(&updateReq); err != nil {
+		var ve validator.ValidationErrors
+		if errors.As(err, &ve) {
+			out := make([]string, len(ve))
+			for i, fe := range ve {
+				out[i] = fmt.Sprintf("Campo '%s' falhou na validação '%s'", fe.Field(), fe.Tag())
+			}
+			c.JSON(http.StatusBadRequest, gin.H{"errors": out})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Dados inválidos"})
+		return
+	}
+
+	// Construir a consulta SQL dinâmica com base nos campos fornecidos
+	query := "UPDATE fever_medication_records SET "
+	args := []interface{}{}
+	argCount := 1
+
+	if updateReq.Temperature != nil {
+		query += fmt.Sprintf("temperature = $%d, ", argCount)
+		args = append(args, *updateReq.Temperature)
+		argCount++
+	}
+
+	if updateReq.Medication != nil {
+		// Verificar se a medicação existe
+		var medID int
+		err := db.QueryRow("SELECT id FROM medications WHERE name=$1", *updateReq.Medication).Scan(&medID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Medicação inválida"})
+				return
+			}
+			log.Printf("Erro ao verificar medicação: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao verificar medicação"})
+			return
+		}
+		query += fmt.Sprintf("medication = $%d, ", argCount)
+		args = append(args, *updateReq.Medication)
+		argCount++
+	}
+
+	if updateReq.DateTime != nil {
+		query += fmt.Sprintf("date_time = $%d, ", argCount)
+		args = append(args, *updateReq.DateTime)
+		argCount++
+	}
+
+	if updateReq.DiseaseID != nil {
+		// Verificar se a disease_id existe
+		var diseaseExists bool
+		err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM diseases WHERE id=$1)", *updateReq.DiseaseID).Scan(&diseaseExists)
+		if err != nil {
+			log.Printf("Erro ao verificar disease_id: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao verificar doença"})
+			return
+		}
+		if !diseaseExists {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Doença inválida"})
+			return
+		}
+		query += fmt.Sprintf("disease_id = $%d, ", argCount)
+		args = append(args, *updateReq.DiseaseID)
+		argCount++
+	}
+
+	// Remover a última vírgula e espaço
+	if len(args) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nenhum campo para atualizar"})
+		return
+	}
+	query = query[:len(query)-2]
+
+	// Adicionar a cláusula WHERE
+	query += fmt.Sprintf(" WHERE id = $%d", argCount)
+	args = append(args, id)
+
+	// Executar a consulta
+	result, err := db.Exec(query, args...)
+	if err != nil {
+		log.Printf("Erro ao atualizar registro: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao atualizar registro"})
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao verificar atualização"})
+		return
+	}
+
+	if rowsAffected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Registro não encontrado"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Registro atualizado com sucesso"})
+}
+
+// deleteFeverMedication apaga um registro existente de febre e medicação
+func deleteFeverMedication(c *gin.Context) {
+	// Obter o ID do registro a partir dos parâmetros da URL
+	idParam := c.Param("id")
+	if idParam == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID do registro é obrigatório"})
+		return
+	}
+
+	// Converter o ID para inteiro
+	id, err := strconv.Atoi(idParam)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID do registro inválido"})
+		return
+	}
+
+	// Executar a consulta de exclusão
+	result, err := db.Exec("DELETE FROM fever_medication_records WHERE id=$1", id)
+	if err != nil {
+		log.Printf("Erro ao apagar registro: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao apagar registro"})
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao verificar deleção"})
+		return
+	}
+
+	if rowsAffected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Registro não encontrado"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Registro apagado com sucesso"})
+}
+
 // getDiseases obtém todas as doenças
 func getDiseases(c *gin.Context) {
 	rows, err := db.Query("SELECT id, name, start_date, end_date FROM diseases")
@@ -379,6 +557,10 @@ func getDiseases(c *gin.Context) {
 			continue
 		}
 		diseases = append(diseases, d)
+	}
+
+	if len(diseases) == 0 {
+		diseases = []Disease{}
 	}
 
 	c.JSON(http.StatusOK, diseases)
@@ -504,6 +686,10 @@ func getMedications(c *gin.Context) {
 		medications = append(medications, m)
 	}
 
+	if len(medications) == 0 {
+		medications = []Medication{}
+	}
+
 	c.JSON(http.StatusOK, medications)
 }
 
@@ -515,7 +701,7 @@ func addMedication(c *gin.Context) {
 		if errors.As(err, &ve) {
 			out := make([]string, len(ve))
 			for i, fe := range ve {
-				out[i] = fmt.Sprintf("Campo '%s' falhou na validação '%s'", fe.Field(), fe.Tag())
+				out[i] = fmt.Sprintf("Campo '%s' falhou na validação '%s' - %s", fe.Field(), fe.Tag(), req.Color)
 			}
 			c.JSON(http.StatusBadRequest, gin.H{"errors": out})
 			return
@@ -604,6 +790,10 @@ func getFeverThresholds(c *gin.Context) {
 			continue
 		}
 		thresholds = append(thresholds, ft)
+	}
+
+	if len(thresholds) == 0 {
+		thresholds = []FeverThreshold{}
 	}
 
 	c.JSON(http.StatusOK, thresholds)

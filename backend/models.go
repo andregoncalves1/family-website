@@ -2,8 +2,64 @@
 package main
 
 import (
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 )
+
+// CustomTime representa um tempo personalizado que aceita o formato "2006-01-02T15:04"
+type CustomTime struct {
+	time.Time
+}
+
+// UnmarshalJSON implementa a interface json.Unmarshaler
+func (ct *CustomTime) UnmarshalJSON(b []byte) error {
+	s := strings.Trim(string(b), "\"")
+
+	// Define o layout esperado
+	layout := "2006-01-02T15:04"
+
+	t, err := time.Parse(layout, s)
+	if err != nil {
+		return fmt.Errorf("invalid date format: %s, expected format: %s", s, layout)
+	}
+	ct.Time = t
+	return nil
+}
+
+// MarshalJSON implementa a interface json.Marshaler
+func (ct CustomTime) MarshalJSON() ([]byte, error) {
+	return json.Marshal(ct.Time.Format("2006-01-02T15:04"))
+}
+
+// Implementar driver.Valuer para CustomTime
+func (ct CustomTime) Value() (driver.Value, error) {
+	return ct.Time, nil
+}
+
+// Implementar sql.Scanner para CustomTime
+func (ct *CustomTime) Scan(value interface{}) error {
+	if value == nil {
+		ct.Time = time.Time{}
+		return nil
+	}
+	switch v := value.(type) {
+	case time.Time:
+		ct.Time = v
+		return nil
+	case string:
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			return err
+		}
+		ct.Time = t
+		return nil
+	default:
+		return fmt.Errorf("unsupported type for CustomTime: %T", value)
+	}
+}
 
 // User representa um utilizador
 type User struct {
@@ -20,13 +76,13 @@ type Profile struct {
 
 // FeverMedicationRecord representa um registro de febre e medicação
 type FeverMedicationRecord struct {
-	ID          int       `json:"id"`
-	ProfileID   int       `json:"profile_id" binding:"required,gt=0"`
-	Temperature float64   `json:"temperature" binding:"omitempty,gte=35,lte=42"`
-	Medication  string    `json:"medication" binding:"omitempty,min=1,max=255"`
-	DateTime    time.Time `json:"date_time" binding:"required"`
-	DiseaseID   *int      `json:"disease_id" binding:"omitempty,gt=0"`
-	DiseaseName *string   `json:"disease_name"`
+	ID          int        `json:"id"`
+	ProfileID   int        `json:"profile_id" binding:"required,gt=0"`
+	Temperature float64    `json:"temperature" binding:"omitempty,gte=35,lte=42"`
+	Medication  string     `json:"medication" binding:"omitempty,min=1,max=255"`
+	DateTime    CustomTime `json:"date_time" binding:"required"`
+	DiseaseID   *int       `json:"disease_id" binding:"omitempty,gt=0"`
+	DiseaseName *string    `json:"disease_name"`
 }
 
 // Disease representa uma doença
@@ -51,4 +107,11 @@ type FeverThreshold struct {
 	MinTemp float64 `json:"min_temp" binding:"required,gte=0"`
 	MaxTemp float64 `json:"max_temp" binding:"required,gtfield=MinTemp"`
 	Color   string  `json:"color" binding:"required,hexcolor"`
+}
+
+type FeverMedicationUpdateRequest struct {
+	Temperature *float64   `json:"temperature" binding:"omitempty,gte=35,lte=42"`
+	Medication  *string    `json:"medication" binding:"omitempty,min=1,max=255"`
+	DateTime    *time.Time `json:"date_time" binding:"omitempty"`
+	DiseaseID   *int       `json:"disease_id" binding:"omitempty,gt=0"`
 }
