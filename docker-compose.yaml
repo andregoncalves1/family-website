@@ -33,18 +33,6 @@ services:
       - "18080:18080"
     restart: unless-stopped
 
-  # Frontend Vue
-  vue_frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: vue_frontend
-    depends_on:
-      - go_backend
-    ports:
-      - "80:80"
-    restart: unless-stopped
-
       # Frontend React
   react_frontend:
     build:

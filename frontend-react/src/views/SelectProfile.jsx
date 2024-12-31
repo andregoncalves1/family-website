@@ -46,8 +46,10 @@ function SelectProfile() {
   // Ao selecionar um profile, salvamos no localStorage e vamos à tela de febre
   const handleSelect = (profileId) => {
     localStorage.setItem('currentProfileId', profileId);
+    window.dispatchEvent(new Event('storage'));
     navigate('/dashboard/health-fever');
     toast.success('Perfil selecionado.');
+    window.location.reload();
   };
 
   const handleOpenAddModal = () => {
