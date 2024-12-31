@@ -3,7 +3,7 @@ import axios from 'axios';
 
 // Crie uma instância do axios com a URL base da sua API
 const api = axios.create({
-  baseURL: 'http://localhost:18080/api', // Atualize se o backend estiver hospedado em outro lugar
+  baseURL: 'http://go_backend:18080/api', // Atualize se o backend estiver hospedado em outro lugar
 });
 
 // Interceptor para adicionar o token a cada requisição, se disponível
