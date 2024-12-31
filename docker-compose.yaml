@@ -9,8 +9,10 @@ services:
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
       - POSTGRES_DB=${DB_NAME}
+    # Mount local (bind mount) para dados do Postgres,
+    # evitando volumes internos do Docker
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - ./postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     restart: unless-stopped
@@ -33,7 +35,7 @@ services:
       - "18080:18080"
     restart: unless-stopped
 
-      # Frontend React
+  # Frontend React
   react_frontend:
     build:
       context: ./frontend-react
@@ -42,8 +44,40 @@ services:
     depends_on:
       - go_backend
     ports:
-      - "3000:80" # Map port 3000 on host to port 80 on container
+      - "3000:80" # Map port 3000 (host) -> 80 (container)
     restart: unless-stopped
 
-volumes:
-  db_data:
+  # Serviço adicional: Backup da base de dados
+  db_backup:
+    # Usamos Alpine + postgresql-client para rodar pg_dump
+    image: alpine:3.18
+    container_name: postgres_db_backup
+    depends_on:
+      - db
+    # Montamos uma pasta no host para armazenar os dumps .sql
+    volumes:
+      - ./db_backups:/backups
+    environment:
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      # Podes ajustar o DB_HOST se necessário; normalmente "db" funciona pois
+      # Docker Compose cria uma rede interna, e o contêiner "db" tem esse hostname.
+      - DB_HOST=db
+    command: >
+      sh -c "
+        # Instalar pacotes necessários para pg_dump
+        apk add --no-cache postgresql-client bash;
+
+        # Preparar a linha de cron: todos os dias às 3h da manhã (0 3 * * *)
+        # Usa pg_dumpall -h db -U ...
+        echo '0 3 * * * PGPASSWORD=$DB_PASSWORD pg_dumpall -h $DB_HOST -U $DB_USER \
+        > /backups/db_$(date +\\%Y\\%m\\%d_\\%H\\%M\\%S).sql 2>/dev/null' \
+        > /etc/crontabs/root;
+
+        # (Opcional) Se quiseres remover dumps antigos (ex: mais de 7 dias):
+        # echo '5 3 * * * find /backups -name "*.sql" -mtime +7 -exec rm {} \;' >> /etc/crontabs/root;
+
+        # Mantém o cron em execução no primeiro plano
+        crond -f -l 2
+      "
+    restart: unless-stopped
