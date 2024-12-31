@@ -44,7 +44,7 @@ services:
     depends_on:
       - go_backend
     ports:
-      - "3000:80" # Map port 3000 (host) -> 80 (container)
+      - "5000:80" # Map port 5000 (host) -> 80 (container)
     restart: unless-stopped
 
   # Serviço adicional: Backup da base de dados
